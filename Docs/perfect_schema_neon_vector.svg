@@ -1,0 +1,234 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generator: Adobe Illustrator 25.2.0, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
+<svg version="1.1" id="Слой_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
+	 width="1150px" height="1000px" viewBox="0 0 1150 1000" style="enable-background:new 0 0 1150 1000;" xml:space="preserve">
+<style type="text/css">
+	.st0{fill:#0A0F1E;}
+	.st1{fill:none;stroke:#FF9100;stroke-width:10;stroke-opacity:0.25;}
+	.st2{fill:#0D1424;stroke:#FF9100;stroke-width:2.5;}
+	.st3{fill:none;stroke:#00E676;stroke-width:10;stroke-opacity:0.22;}
+	.st4{fill:#07140F;stroke:#00E676;stroke-width:2.5;}
+	.st5{fill:none;stroke:#80DEEA;stroke-width:8;stroke-opacity:0.2;}
+	.st6{fill:#101820;stroke:#CFD8DC;stroke-width:2;}
+	.st7{fill:#4FC3F7;}
+	.st8{font-family:'Arial-BoldMT';}
+	.st9{font-size:14px;}
+	.st10{fill:none;stroke:#CFD8DC;stroke-width:8;stroke-opacity:0.15;}
+	.st11{fill:#121A2F;stroke:#CFD8DC;stroke-width:2;}
+	.st12{font-size:16px;}
+	.st13{fill:#1C2541;stroke:#90CAF9;stroke-width:1.5;}
+	.st14{font-family:'ArialMT';}
+	.st15{fill:none;stroke:#90A4AE;stroke-width:2;stroke-dasharray:6,6;}
+	.st16{fill:#152238;stroke:#4FC3F7;stroke-width:2;}
+	.st17{font-size:18px;}
+	.st18{fill:#FF3366;}
+	.st19{fill:none;stroke:#FF3366;stroke-width:10;stroke-linecap:round;stroke-opacity:0.35;}
+	.st20{fill:none;stroke:#FF3366;stroke-width:4;stroke-linecap:round;}
+	.st21{fill:#FFEA00;}
+	.st22{fill:none;stroke:#FFEA00;stroke-width:10;stroke-linecap:round;stroke-opacity:0.35;}
+	.st23{fill:none;stroke:#FFEA00;stroke-width:4;stroke-linecap:round;}
+	.st24{fill:#D500F9;}
+	.st25{fill:none;stroke:#D500F9;stroke-width:10;stroke-linecap:round;stroke-opacity:0.35;}
+	.st26{fill:none;stroke:#D500F9;stroke-width:4;stroke-linecap:round;}
+	.st27{fill:none;stroke:#607D8B;stroke-width:2;}
+	.st28{fill:#0A0F1E;stroke:#90CAF9;stroke-width:1.5;}
+	.st29{font-size:12px;}
+	.st30{fill:#152238;stroke:#4FC3F7;stroke-width:1.5;}
+	.st31{fill:#1C2541;stroke:#00E676;stroke-width:1.5;}
+	.st32{fill:#00E676;}
+	.st33{fill:none;stroke:#00E5FF;stroke-width:7;stroke-linecap:round;stroke-opacity:0.35;}
+	.st34{fill:none;}
+	.st35{fill:#00E5FF;}
+	.st36{fill:none;stroke:#FF3366;stroke-width:7;stroke-linecap:round;stroke-opacity:0.35;}
+	.st37{fill:none;stroke:#FFEA00;stroke-width:7;stroke-linecap:round;stroke-opacity:0.35;}
+	.st38{fill:none;stroke:#D500F9;stroke-width:7;stroke-linecap:round;stroke-opacity:0.35;}
+	.st39{fill:none;stroke:#00E676;stroke-width:7;stroke-linecap:round;stroke-opacity:0.35;}
+	.st40{fill:none;stroke:#00E5FF;stroke-width:9.7809;stroke-linecap:round;stroke-opacity:0.35;}
+</style>
+<desc>Exact block topology from perfect_schema.svg. Neon style. Editable in Adobe Illustrator.</desc>
+<rect y="0" class="st0" width="1150" height="1000"/>
+<path class="st1" d="M206,30h838c3.3,0,6,2.7,6,6v288c0,3.3-2.7,6-6,6H206c-3.3,0-6-2.7-6-6V36C200,32.7,202.7,30,206,30z"/>
+<path class="st2" d="M206,30h838c3.3,0,6,2.7,6,6v288c0,3.3-2.7,6-6,6H206c-3.3,0-6-2.7-6-6V36C200,32.7,202.7,30,206,30z"/>
+<path class="st3" d="M36,350h1008c3.3,0,6,2.7,6,6v188c0,3.3-2.7,6-6,6H36c-3.3,0-6-2.7-6-6V356C30,352.7,32.7,350,36,350z"/>
+<path class="st4" d="M37.2,350h1008c3.3,0,6,2.7,6,6v188c0,3.3-2.7,6-6,6H37.2c-3.3,0-6-2.7-6-6V356C31.2,352.7,33.9,350,37.2,350z"
+	/>
+<path class="st5" d="M226,580h358c3.3,0,6,2.7,6,6v258c0,3.3-2.7,6-6,6H226c-3.3,0-6-2.7-6-6V586C220,582.7,222.7,580,226,580z"/>
+<path class="st6" d="M226,580h358c3.3,0,6,2.7,6,6v258c0,3.3-2.7,6-6,6H226c-3.3,0-6-2.7-6-6V586C220,582.7,222.7,580,226,580z"/>
+<text transform="matrix(1 0 0 1 240 610)" class="st7 st8 st9">Модуль I/O</text>
+<path class="st5" d="M636,580h358c3.3,0,6,2.7,6,6v258c0,3.3-2.7,6-6,6H636c-3.3,0-6-2.7-6-6V586C630,582.7,632.7,580,636,580z"/>
+<path class="st6" d="M636,580h358c3.3,0,6,2.7,6,6v258c0,3.3-2.7,6-6,6H636c-3.3,0-6-2.7-6-6V586C630,582.7,632.7,580,636,580z"/>
+<text transform="matrix(1 0 0 1 650 610)" class="st7 st8 st9">Модуль I/O</text>
+<path class="st10" d="M36,30h108c3.3,0,6,2.7,6,6v238c0,3.3-2.7,6-6,6H36c-3.3,0-6-2.7-6-6V36C30,32.7,32.7,30,36,30z"/>
+<path class="st11" d="M36,30h108c3.3,0,6,2.7,6,6v238c0,3.3-2.7,6-6,6H36c-3.3,0-6-2.7-6-6V36C30,32.7,32.7,30,36,30z"/>
+<text transform="matrix(1 0 0 1 53.6055 140)" class="st7 st8 st12">Внешний</text>
+<text transform="matrix(1 0 0 1 67.8789 160)" class="st7 st8 st12">шкаф</text>
+<path class="st13" d="M234,90h102c2.2,0,4,1.8,4,4v52c0,2.2-1.8,4-4,4H234c-2.2,0-4-1.8-4-4V94C230,91.8,231.8,90,234,90z"/>
+<text transform="matrix(1 0 0 1 263.5967 115)" class="st7 st14 st9">RS485</text>
+<text transform="matrix(1 0 0 1 250.6289 135)" class="st7 st14 st9">Трансивер</text>
+<path class="st13" d="M234,200h102c2.2,0,4,1.8,4,4v52c0,2.2-1.8,4-4,4H234c-2.2,0-4-1.8-4-4v-52C230,201.8,231.8,200,234,200z"/>
+<text transform="matrix(1 0 0 1 269.1646 225)" class="st7 st14 st9">Вход</text>
+<text transform="matrix(1 0 0 1 244.3125 245)" class="st7 st14 st9">питания 24В</text>
+<line class="st15" x1="370" y1="50" x2="370" y2="310"/>
+<path class="st13" d="M404,90h122c2.2,0,4,1.8,4,4v52c0,2.2-1.8,4-4,4H404c-2.2,0-4-1.8-4-4V94C400,91.8,401.8,90,404,90z"/>
+<text transform="matrix(1 0 0 1 430.9229 115)" class="st7 st14 st9">Цифровой</text>
+<text transform="matrix(1 0 0 1 409.2461 135)" class="st7 st14 st9">изолятор данных</text>
+<path class="st13" d="M404,200h122c2.2,0,4,1.8,4,4v52c0,2.2-1.8,4-4,4H404c-2.2,0-4-1.8-4-4v-52C400,201.8,401.8,200,404,200z"/>
+<text transform="matrix(1 0 0 1 410.1997 225)" class="st7 st14 st9">DC/DC Изолятор</text>
+<text transform="matrix(1 0 0 1 419.6675 245)" class="st7 st14 st9">24B-&gt;24B ISO</text>
+<path class="st13" d="M564,200h92c2.2,0,4,1.8,4,4v52c0,2.2-1.8,4-4,4h-92c-2.2,0-4-1.8-4-4v-52C560,201.8,561.8,200,564,200z"/>
+<text transform="matrix(1 0 0 1 587.8345 225)" class="st7 st14 st9">DC/DC</text>
+<text transform="matrix(1 0 0 1 582.564 245)" class="st7 st14 st9">24B-&gt;5B</text>
+<path class="st13" d="M694,200h92c2.2,0,4,1.8,4,4v52c0,2.2-1.8,4-4,4h-92c-2.2,0-4-1.8-4-4v-52C690,201.8,691.8,200,694,200z"/>
+<text transform="matrix(1 0 0 1 725.6069 225)" class="st7 st14 st9">LDO</text>
+<text transform="matrix(1 0 0 1 711.0054 245)" class="st7 st14 st9">5V-&gt;3.3V</text>
+<path class="st16" d="M826,70h188c3.3,0,6,2.7,6,6v218c0,3.3-2.7,6-6,6H826c-3.3,0-6-2.7-6-6V76C820,72.7,822.7,70,826,70z"/>
+<text transform="matrix(1 0 0 1 870.478 185)" class="st7 st8 st17">STM32F103</text>
+<text transform="matrix(1 0 0 1 40 380)" class="st18 st8 st9">+24V_Iso</text>
+<text transform="matrix(1 0 0 1 40 400)" class="st18 st8 st9">питание датчиков</text>
+<line class="st19" x1="40" y1="410" x2="1030" y2="410"/>
+<line class="st20" x1="40" y1="410" x2="1030" y2="410"/>
+<text transform="matrix(1 0 0 1 40 440)" class="st21 st8 st9">+5V_logic</text>
+<text transform="matrix(1 0 0 1 40 460)" class="st21 st8 st9">питание логики</text>
+<line class="st22" x1="40" y1="470" x2="1030" y2="470"/>
+<line class="st23" x1="40" y1="470" x2="1030" y2="470"/>
+<text transform="matrix(1 0 0 1 40 510)" class="st24 st8 st9">SPI шина данных</text>
+<line class="st25" x1="40" y1="520" x2="1030" y2="520"/>
+<line class="st26" x1="40" y1="520" x2="1030" y2="520"/>
+<line class="st27" x1="40" y1="560" x2="1030" y2="560"/>
+<line class="st15" x1="390" y1="590" x2="390" y2="840"/>
+<path class="st13" d="M254,730h72c2.2,0,4,1.8,4,4v62c0,2.2-1.8,4-4,4h-72c-2.2,0-4-1.8-4-4v-62C250,731.8,251.8,730,254,730z"/>
+<text transform="matrix(1 0 0 1 275.1216 760)" class="st7 st14 st9">АЦП</text>
+<text transform="matrix(1 0 0 1 260.0347 780)" class="st7 st14 st9">ADS1248</text>
+<path class="st28" d="M378,730h24c1.7,0,3,1.3,3,3v64c0,1.7-1.3,3-3,3h-24c-1.7,0-3-1.3-3-3v-64C375,731.3,376.3,730,378,730z"/>
+<text transform="matrix(6.123234e-17 -1 1 6.123234e-17 390 788.6827)" class="st7 st14 st29">ISO7641</text>
+<path class="st30" d="M434,730h132c2.2,0,4,1.8,4,4v62c0,2.2-1.8,4-4,4H434c-2.2,0-4-1.8-4-4v-62C430,731.8,431.8,730,434,730z"/>
+<text transform="matrix(1 0 0 1 455.9805 770)" class="st7 st8 st12">STM32F103</text>
+<path class="st13" d="M464,610h72c2.2,0,4,1.8,4,4v52c0,2.2-1.8,4-4,4h-72c-2.2,0-4-1.8-4-4v-52C460,611.8,461.8,610,464,610z"/>
+<text transform="matrix(1 0 0 1 485.6069 635)" class="st7 st14 st9">LDO</text>
+<text transform="matrix(1 0 0 1 471.0054 655)" class="st7 st14 st9">5V-&gt;3.3V</text>
+<path class="st31" d="M224,880h152c2.2,0,4,1.8,4,4v42c0,2.2-1.8,4-4,4H224c-2.2,0-4-1.8-4-4v-42C220,881.8,221.8,880,224,880z"/>
+<text transform="matrix(1 0 0 1 248.3555 910)" class="st32 st8 st12">Датчик 0-10В</text>
+<line class="st15" x1="800" y1="590" x2="800" y2="840"/>
+<path class="st13" d="M664,730h72c2.2,0,4,1.8,4,4v62c0,2.2-1.8,4-4,4h-72c-2.2,0-4-1.8-4-4v-62C660,731.8,661.8,730,664,730z"/>
+<text transform="matrix(1 0 0 1 685.1216 760)" class="st7 st14 st9">АЦП</text>
+<text transform="matrix(1 0 0 1 670.0347 780)" class="st7 st14 st9">ADS1248</text>
+<path class="st28" d="M788,730h24c1.7,0,3,1.3,3,3v64c0,1.7-1.3,3-3,3h-24c-1.7,0-3-1.3-3-3v-64C785,731.3,786.3,730,788,730z"/>
+<text transform="matrix(6.123234e-17 -1 1 6.123234e-17 800 788.6827)" class="st7 st14 st29">ISO7641</text>
+<path class="st30" d="M844,730h132c2.2,0,4,1.8,4,4v62c0,2.2-1.8,4-4,4H844c-2.2,0-4-1.8-4-4v-62C840,731.8,841.8,730,844,730z"/>
+<text transform="matrix(1 0 0 1 865.9805 770)" class="st7 st8 st12">STM32F103</text>
+<path class="st13" d="M874,610h72c2.2,0,4,1.8,4,4v52c0,2.2-1.8,4-4,4h-72c-2.2,0-4-1.8-4-4v-52C870,611.8,871.8,610,874,610z"/>
+<text transform="matrix(1 0 0 1 895.6069 635)" class="st7 st14 st9">LDO</text>
+<text transform="matrix(1 0 0 1 881.0054 655)" class="st7 st14 st9">5V-&gt;3.3V</text>
+<path class="st31" d="M634,880h152c2.2,0,4,1.8,4,4v42c0,2.2-1.8,4-4,4H634c-2.2,0-4-1.8-4-4v-42C630,881.8,631.8,880,634,880z"/>
+<text transform="matrix(1 0 0 1 652.4375 910)" class="st32 st8 st12">Датчик 4-20мА</text>
+<line class="st33" x1="150" y1="120" x2="220" y2="120"/>
+<path class="st34" d=""/>
+<path class="st35" d="M165.8,111.2l-17.5,8.8l17.5,8.8V111.2z"/>
+<path class="st35" d="M211.2,111.2l17.5,8.8l-17.5,8.8V111.2z"/>
+<path marker-start="url(#arr-00e5ff-start)" marker-end="url(#arr-00e5ff)" class="st35" d="M220,120"/>
+<line class="st36" x1="150" y1="230" x2="220" y2="230"/>
+<path class="st34" d=""/>
+<path class="st18" d="M211.2,221.2l17.5,8.8l-17.5,8.8V221.2z"/>
+<path marker-end="url(#arr-ff3366)" class="st18" d="M220,230"/>
+<line class="st33" x1="340" y1="120" x2="390" y2="120"/>
+<path class="st34" d=""/>
+<path class="st35" d="M355.8,111.2l-17.5,8.8l17.5,8.8V111.2z"/>
+<path class="st35" d="M383,111.2l17.5,8.8l-17.5,8.8V111.2z"/>
+<path marker-start="url(#arr-00e5ff-start)" marker-end="url(#arr-00e5ff)" class="st35" d="M390,120"/>
+<line class="st36" x1="340" y1="230" x2="390" y2="230"/>
+<path class="st34" d=""/>
+<path class="st18" d="M381.2,221.2l17.5,8.8l-17.5,8.8V221.2z"/>
+<path marker-end="url(#arr-ff3366)" class="st18" d="M390,230"/>
+<line class="st36" x1="530" y1="230" x2="550" y2="230"/>
+<path class="st34" d=""/>
+<path class="st18" d="M541.2,221.2l17.5,8.8l-17.5,8.8V221.2z"/>
+<path marker-end="url(#arr-ff3366)" class="st18" d="M550,230"/>
+<line class="st37" x1="660" y1="230" x2="680" y2="230"/>
+<path class="st34" d=""/>
+<path class="st21" d="M672.4,221.6l17.5,8.8l-17.5,8.8V221.6z"/>
+<path marker-end="url(#arr-ffea00)" class="st21" d="M680,230"/>
+<line class="st37" x1="790" y1="230" x2="810" y2="230"/>
+<path class="st34" d=""/>
+<path class="st21" d="M801.2,221.2l17.5,8.8l-17.5,8.8V221.2z"/>
+<path marker-end="url(#arr-ffea00)" class="st21" d="M810,230"/>
+<line class="st36" x1="465" y1="260" x2="465" y2="400"/>
+<path class="st34" d=""/>
+<path class="st18" d="M473.8,393l-8.8,17.5l-8.8-17.5H473.8z"/>
+<path marker-end="url(#arr-ff3366)" class="st18" d="M465,400"/>
+<circle class="st18" cx="465" cy="410" r="5"/>
+<line class="st37" x1="610" y1="260" x2="610" y2="460"/>
+<path class="st34" d=""/>
+<path class="st21" d="M618.8,450l-8.8,17.5l-8.8-17.5H618.8z"/>
+<path marker-end="url(#arr-ffea00)" class="st21" d="M610,460"/>
+<circle class="st21" cx="610" cy="470" r="5"/>
+<line class="st38" x1="920" y1="300" x2="920" y2="510"/>
+<path class="st34" d=""/>
+<path class="st24" d="M928.8,501.2l-8.8,17.5l-8.8-17.5H928.8z"/>
+<path marker-end="url(#arr-d500f9)" class="st24" d="M920,510"/>
+<circle class="st24" cx="920" cy="520" r="5"/>
+<line class="st36" x1="240" y1="410" x2="240" y2="870"/>
+<path class="st34" d=""/>
+<path class="st18" d="M248.8,860.2l-8.8,17.5l-8.8-17.5H248.8z"/>
+<path marker-end="url(#arr-ff3366)" class="st18" d="M240,870"/>
+<circle class="st18" cx="240" cy="410" r="5"/>
+<line class="st39" x1="290" y1="880" x2="290" y2="810"/>
+<path class="st34" d=""/>
+<path class="st32" d="M281.2,817.8l8.8-17.5l8.8,17.5H281.2z"/>
+<path marker-end="url(#arr-00e676)" class="st32" d="M290,810"/>
+<line class="st33" x1="330" y1="765" x2="365" y2="765"/>
+<path class="st34" d=""/>
+<path class="st35" d="M357.2,756.2l17.5,8.8l-17.5,8.8V756.2z"/>
+<path marker-end="url(#arr-00e5ff)" class="st35" d="M365,765"/>
+<line class="st33" x1="405" y1="765" x2="420" y2="765"/>
+<path class="st34" d=""/>
+<path class="st35" d="M411.2,756.2l17.5,8.8l-17.5,8.8V756.2z"/>
+<path marker-end="url(#arr-00e5ff)" class="st35" d="M420,765"/>
+<line class="st37" x1="480" y1="470" x2="480" y2="600"/>
+<path class="st34" d=""/>
+<path class="st21" d="M488.4,591l-8.8,17.5l-8.8-17.5H488.4z"/>
+<path marker-end="url(#arr-ffea00)" class="st21" d="M480,600"/>
+<circle class="st21" cx="480" cy="470" r="5"/>
+<line class="st37" x1="500" y1="670" x2="500" y2="720"/>
+<path class="st34" d=""/>
+<path class="st21" d="M508.8,712.2l-8.8,17.5l-8.8-17.5H508.8z"/>
+<path marker-end="url(#arr-ffea00)" class="st21" d="M500,720"/>
+<line class="st38" x1="550" y1="520" x2="550" y2="720"/>
+<path class="st34" d=""/>
+<path class="st24" d="M558.8,711.2l-8.8,17.5l-8.8-17.5H558.8z"/>
+<path marker-end="url(#arr-d500f9)" class="st24" d="M550,720"/>
+<circle class="st24" cx="550" cy="520" r="5"/>
+<line class="st36" x1="650" y1="410" x2="650" y2="870"/>
+<path class="st34" d=""/>
+<path class="st18" d="M658.8,861.2l-8.8,17.5l-8.8-17.5H658.8z"/>
+<path marker-end="url(#arr-ff3366)" class="st18" d="M650,870"/>
+<circle class="st18" cx="650" cy="410" r="5"/>
+<line class="st39" x1="700" y1="880" x2="700" y2="810"/>
+<path class="st34" d=""/>
+<path class="st32" d="M691.2,817.8l8.8-17.5l8.8,17.5H691.2z"/>
+<path marker-end="url(#arr-00e676)" class="st32" d="M700,810"/>
+<line class="st33" x1="740" y1="765" x2="775" y2="765"/>
+<path class="st34" d=""/>
+<path class="st35" d="M766.2,756.2l17.5,8.8l-17.5,8.8V756.2z"/>
+<path marker-end="url(#arr-00e5ff)" class="st35" d="M775,765"/>
+<line class="st33" x1="815" y1="765" x2="830" y2="765"/>
+<path class="st34" d=""/>
+<path class="st35" d="M823.2,756.2l17.5,8.8l-17.5,8.8V756.2z"/>
+<path marker-end="url(#arr-00e5ff)" class="st35" d="M830,765"/>
+<line class="st37" x1="890" y1="470" x2="890" y2="600"/>
+<path class="st34" d=""/>
+<path class="st21" d="M898.8,592.2l-8.8,17.5l-8.8-17.5H898.8z"/>
+<path marker-end="url(#arr-ffea00)" class="st21" d="M890,600"/>
+<circle class="st21" cx="890" cy="470" r="5"/>
+<line class="st37" x1="910" y1="670" x2="910" y2="720"/>
+<path class="st34" d=""/>
+<path class="st21" d="M918.8,713.2l-8.8,17.5l-8.8-17.5H918.8z"/>
+<path marker-end="url(#arr-ffea00)" class="st21" d="M910,720"/>
+<line class="st38" x1="960" y1="520" x2="960" y2="720"/>
+<path class="st34" d=""/>
+<path class="st24" d="M968.8,712.2l-8.8,17.5l-8.8-17.5H968.8z"/>
+<path marker-end="url(#arr-d500f9)" class="st24" d="M960,720"/>
+<circle class="st24" cx="960" cy="520" r="5"/>
+<line class="st40" x1="535" y1="117.8" x2="808.3" y2="117.8"/>
+<path class="st35" d="M546.1,109l-17.5,8.8l17.5,8.8V109z"/>
+<path class="st35" d="M803,109l17.5,8.8l-17.5,8.8V109z"/>
+</svg>

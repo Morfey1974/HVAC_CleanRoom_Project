@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SoW: Master Module + Analog Input Module</title>
+<style>
+    /* Brand palette from CMYK swatches (sRGB equivalents for PDF) */
+    :root {
+        --c-gray:   #cccccc; /* C0 M0 Y0 K20 */
+        --c-red:    #ff1a26; /* C0 M90 Y85 K0 */
+        --c-green:  #3fff3f; /* C75 M0 Y75 K0 */
+        --c-teal:   #296a7a; /* C79 M45 Y37 K24 */
+        --c-text:   #2a2a2a;
+        --c-note-bg: #f2f2f2;
+        --c-imp-bg:  #fff0f1;
+    }
+
+    @page {
+        size: A4;
+        margin: 18mm 16mm 18mm 16mm;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+        font-family: "Segoe UI", Arial, Helvetica, sans-serif;
+        color: var(--c-text);
+        line-height: 1.55;
+        font-size: 10.5pt;
+        text-align: justify;
+        hyphens: auto;
+        margin: 0;
+        padding: 0;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    h1 {
+        color: var(--c-teal);
+        font-size: 15.5pt;
+        border-bottom: 3px solid var(--c-red);
+        padding-bottom: 8px;
+        margin: 0 0 16px 0;
+        line-height: 1.3;
+        text-align: left;
+    }
+
+    h2 {
+        color: var(--c-teal);
+        font-size: 12.5pt;
+        border-left: 5px solid var(--c-green);
+        padding-left: 10px;
+        margin: 20px 0 10px 0;
+        page-break-after: avoid;
+    }
+
+    p { margin: 0 0 9px 0; }
+
+    ul, ol {
+        margin: 0 0 12px 0;
+        padding-left: 22px;
+    }
+    li { margin-bottom: 5px; }
+
+    strong { color: var(--c-teal); }
+
+    .important-block {
+        background-color: var(--c-imp-bg);
+        border-left: 5px solid var(--c-red);
+        padding: 12px 14px;
+        margin: 12px 0 16px 0;
+        page-break-inside: avoid;
+    }
+    .important-title {
+        color: var(--c-red);
+        font-weight: 700;
+        display: block;
+        margin-bottom: 8px;
+        font-size: 11pt;
+    }
+
+    .note-block {
+        background-color: var(--c-note-bg);
+        border-left: 5px solid var(--c-green);
+        padding: 12px 14px;
+        margin: 12px 0 16px 0;
+        page-break-inside: avoid;
+    }
+    .note-title {
+        color: var(--c-teal);
+        font-weight: 700;
+        display: block;
+        margin-bottom: 8px;
+        font-size: 11pt;
+    }
+
+    code {
+        background-color: var(--c-gray);
+        padding: 1px 5px;
+        border-radius: 3px;
+        font-family: Consolas, "Courier New", monospace;
+        font-size: 9.5pt;
+        color: #222;
+    }
+
+    .footer-meta {
+        margin-top: 24px;
+        padding-top: 8px;
+        border-top: 1px solid var(--c-gray);
+        font-size: 8.5pt;
+        color: #666;
+        text-align: left;
+    }
+</style>
+</head>
+<body>
+
+<h1>Statement of Work: Schematic Design of a Data Acquisition System (Master Module + Analog Input Module)</h1>
+
+<h2>1. Purpose and System Composition</h2>
+<p>The Contractor shall develop <strong>schematic diagrams (Schematics) only</strong> for the data acquisition system. Printed circuit board (PCB) layout is <strong>not required</strong> at this stage.</p>
+
+<p>The system consists of two boards:</p>
+<ol>
+    <li><strong>Master Module</strong> — a gateway providing external communication over RS-485 and distributing power to the measurement section.</li>
+    <li><strong>Analog Input Module</strong> — a dual-channel board that digitizes signals from external sensors (0–10 V or 4–20 mA, e.g. climate probes such as Rotronic HF5). The Master Module controls the Analog Input Module over an internal SPI bus.</li>
+</ol>
+
+<h2>2. Development Environment and Component Requirements</h2>
+<ul>
+    <li><strong>EDA tool:</strong> Strictly <strong>EasyEDA</strong> (Pro or Standard).</li>
+    <li><strong>Component library:</strong> Every schematic symbol must be linked to LCSC Electronics part numbers (C-part numbers) so the design is immediately ready for PCBA (automated assembly at JLCPCB).</li>
+</ul>
+
+<h2>3. Architecture and Design Principles</h2>
+<p>As a baseline reference, an architecture based on STM32F103 microcontrollers, a precision ADC (e.g. ADS1248), and digital isolators (e.g. ISO7641) is proposed.</p>
+
+<div class="important-block">
+    <span class="important-title">ATTENTION!</span>
+    <p>The attached Texas Instruments reference schematic covers <strong>only</strong> a standard analog input (0–10 V / 4–20 mA). Direct temperature-sensor inputs (RTD, thermocouples) are <strong>out of scope and not required</strong> for this assignment.</p>
+    <p><strong>Analog front-end power:</strong> the TI schematic may use a bipolar supply (±15 V). If the circuit can be simplified to use the available single-ended 24 V supply (avoiding generation of a negative rail), such proposals are strongly welcome.</p>
+    <p>Overall, a competent adaptation of the Texas Instruments reference to our requirements (removing what is not needed) is an excellent approach.</p>
+</div>
+
+<div class="note-block">
+    <span class="note-title">NOTE</span>
+    <p>The designer is <strong>allowed and encouraged</strong> to propose modern component alternatives or a fully original schematic solution (especially for the power section), while preserving the key principles: reliable galvanic isolation, required measurement accuracy, and fault tolerance.</p>
+    <p><strong>Component optimization:</strong> There are no hard requirements for a high sensor update rate. To reduce cost and simplify the BOM, clocking microcontrollers from the internal RC oscillator (HSI) without external crystal resonators is acceptable if the designer considers this sufficiently stable for the interfaces in use (SPI and RS-485).</p>
+</div>
+
+<h2>4. Master Module Schematic</h2>
+<ol>
+    <li><strong>External communication:</strong> External control is performed over RS-485. This interface must be <strong>galvanically isolated</strong> from the Master Module internal logic (recommended: transceiver + digital isolator).</li>
+    <li><strong>Power management:</strong> External 24 V power enters the Master Module. On the Master Module this supply must be galvanically isolated and converted for distribution onto the inter-module power bus.</li>
+    <li><strong>Internal communication:</strong> The Master Module acts as the SPI Master node for polling the Analog Input Module.</li>
+</ol>
+
+<h2>5. Analog Input Module Schematic</h2>
+<ol>
+    <li><strong>Module power:</strong> The module connects to the internal system bus via an inter-module connector. The module <strong>does not use</strong> isolated 24 V to power its own electronics. The entire measurement and digital section of the Module (MCU, ADC, isolators) must be powered from the <code>+5V_Logic</code> rail supplied over the system bus from the Master Module. A local LDO (5 V → 3.3 V) is recommended.</li>
+    <li><strong>Sensor terminal block:</strong> Isolated 24 V (<code>+24V_ISO</code>) passes through the Module as a feed-through. The board must provide a terminal block for sensor power and signal reception with the following pinout: <strong><code>+24V</code></strong>, <strong><code>GND</code></strong>, <strong><code>OUT1</code></strong>, <strong><code>OUT2</code></strong>.</li>
+    <li><strong>Analog input characteristics:</strong> The module must process <strong>two independent analog channels</strong> (OUT1 and OUT2). Support for <strong>0–10 V</strong> or <strong>4–20 mA</strong> is required. Independent configuration (hardware jumpers or software switching) must be provided to select the input type (voltage/current) for each of the two channels. Signals from OUT1 and OUT2 terminals feed directly into a protected measurement front-end.</li>
+    <li><strong>Galvanic isolation:</strong> An internal digital isolation barrier is mandatory. <strong>Critical requirement:</strong> isolation must be applied strictly <strong>after digitization</strong> (digital isolation). Analog isolating amplifiers <em>before</em> the ADC are not allowed, to avoid accuracy loss. The barrier may be placed between the ADC and the microcontroller, or between the microcontroller and the external SPI bus (at the circuit designer’s discretion).</li>
+    <li><strong>Input protection:</strong> Analog terminals must include robust protection (overvoltage, ESD, EMI, and accidental reverse polarity / shorting of 24 V onto a signal line by the installer).</li>
+</ol>
+
+<h2>6. Expected Deliverable (Stage 1)</h2>
+<p>Delivery of EasyEDA schematic source files for the Master Module and the Analog Input Module, with a complete bill of materials (BOM LCSC), for final logic review and approval.</p>
+
+<h2>7. Further Cooperation (Stage 2: PCB Layout)</h2>
+<p>For a contractor who completes the current stage (schematic design) diligently and to a high technical standard, a second paid stage will be offered — <strong>PCB layout development</strong>.</p>
+<p>Exact board dimensions, form factor, footprints, and connector specifications will be provided by the Customer before the start of Stage 2.</p>
+
+</body>
+</html>
