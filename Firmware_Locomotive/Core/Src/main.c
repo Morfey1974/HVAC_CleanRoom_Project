@@ -23,7 +23,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <stdlib.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -44,7 +44,15 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
+extern FDCAN_HandleTypeDef hfdcan2;
+FDCAN_TxHeaderTypeDef TxHeader;
+uint8_t TxData[8];
 
+uint32_t node_ids[3] = {0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF}; // 0xFFFFFFFF = Lost/Error
+uint32_t node_last_seen[3] = {0, 0, 0};
+uint32_t loco_tx_count = 0;
+uint16_t node_errors[3] = {0, 0, 0};
+uint32_t loco_hw_errors = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -90,7 +98,27 @@ int main(void)
   MX_FDCAN1_Init();
   MX_FDCAN2_Init();
   /* USER CODE BEGIN 2 */
+  TxHeader.Identifier = 0x111;
+  TxHeader.IdType = FDCAN_STANDARD_ID;
+  TxHeader.TxFrameType = FDCAN_DATA_FRAME;
+  TxHeader.DataLength = FDCAN_DLC_BYTES_3;
+  TxHeader.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
+  TxHeader.BitRateSwitch = FDCAN_BRS_OFF;
+  TxHeader.FDFormat = FDCAN_CLASSIC_CAN;
+  TxHeader.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
+  TxHeader.MessageMarker = 0;
 
+  FDCAN_FilterTypeDef sFilterConfig;
+  sFilterConfig.IdType = FDCAN_STANDARD_ID;
+  sFilterConfig.FilterIndex = 0;
+  sFilterConfig.FilterType = FDCAN_FILTER_MASK;
+  sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
+  sFilterConfig.FilterID1 = 0x000;
+  sFilterConfig.FilterID2 = 0x000;
+  HAL_FDCAN_ConfigFilter(&hfdcan2, &sFilterConfig);
+  HAL_FDCAN_ActivateNotification(&hfdcan2, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0);
+
+  HAL_FDCAN_Start(&hfdcan2);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -100,6 +128,73 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    if (hfdcan2.Instance->PSR & FDCAN_PSR_BO) {
+        HAL_FDCAN_Stop(&hfdcan2);
+        HAL_FDCAN_Start(&hfdcan2);
+    }
+
+    uint32_t now = HAL_GetTick();
+
+    // 1. Опрос 3-х дисплеев
+    for (int i = 0; i < 3; i++) {
+        if (now - node_last_seen[i] > 3000) {
+            node_ids[i] = 0xFFFFFFFF; // Error / Lost
+            if (node_errors[i] < 65535) node_errors[i]++;
+        }
+        
+        TxHeader.Identifier = 0x201 + i;
+        TxHeader.DataLength = FDCAN_DLC_BYTES_0;
+        if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan2, &TxHeader, TxData) == HAL_OK) loco_tx_count++;
+        HAL_Delay(10);
+    }
+
+    // 2. Отправка результатов опроса главному дисплею
+    for (int i = 0; i < 3; i++) {
+        TxHeader.Identifier = 0x301 + i;
+        TxHeader.DataLength = FDCAN_DLC_BYTES_4;
+        TxData[0] = node_ids[i] & 0xFF;
+        TxData[1] = (node_ids[i] >> 8) & 0xFF;
+        TxData[2] = (node_ids[i] >> 16) & 0xFF;
+        TxData[3] = (node_ids[i] >> 24) & 0xFF;
+        if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan2, &TxHeader, TxData) == HAL_OK) loco_tx_count++;
+        HAL_Delay(10);
+    }
+
+    // 3. Отправка случайных данных по комнате
+    TxHeader.Identifier = 0x111;
+    TxHeader.DataLength = FDCAN_DLC_BYTES_3;
+    TxData[0] = (uint8_t)((rand() % 16) + 15); // Температура: 15..30
+    TxData[1] = (uint8_t)((rand() % 31) + 30); // Влажность: 30..60
+    TxData[2] = (uint8_t)((rand() % 51) + 50); // Давление: 50..100
+    if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan2, &TxHeader, TxData) == HAL_OK) loco_tx_count++;
+    
+    // 4. Отправка метрик (статистики) на дисплей
+    TxHeader.Identifier = 0x304;
+    TxHeader.DataLength = FDCAN_DLC_BYTES_8;
+    TxData[0] = loco_tx_count & 0xFF;
+    TxData[1] = (loco_tx_count >> 8) & 0xFF;
+    TxData[2] = (loco_tx_count >> 16) & 0xFF;
+    TxData[3] = (loco_tx_count >> 24) & 0xFF;
+    uint32_t ecr = hfdcan2.Instance->ECR;
+    loco_hw_errors += ((ecr >> 16) & 0xFF); // Накапливаем ошибки CEL (сбрасываются при чтении)
+    TxData[4] = ecr & 0xFF; // TEC
+    TxData[5] = (ecr >> 8) & 0xFF; // REC
+    TxData[6] = loco_hw_errors & 0xFF;
+    TxData[7] = (loco_hw_errors >> 8) & 0xFF;
+    if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan2, &TxHeader, TxData) == HAL_OK) loco_tx_count++;
+
+    // 5. Отправка счетчиков программных ошибок по каждому узлу
+    TxHeader.Identifier = 0x305;
+    TxHeader.DataLength = FDCAN_DLC_BYTES_6;
+    TxData[0] = node_errors[0] & 0xFF;
+    TxData[1] = (node_errors[0] >> 8) & 0xFF;
+    TxData[2] = node_errors[1] & 0xFF;
+    TxData[3] = (node_errors[1] >> 8) & 0xFF;
+    TxData[4] = node_errors[2] & 0xFF;
+    TxData[5] = (node_errors[2] >> 8) & 0xFF;
+    if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan2, &TxHeader, TxData) == HAL_OK) loco_tx_count++;
+
+    HAL_Delay(1000); // Цикл раз в 1 секунду
   }
   /* USER CODE END 3 */
 }
@@ -149,7 +244,24 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-
+void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
+{
+  if ((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) != RESET)
+  {
+    FDCAN_RxHeaderTypeDef RxHeader;
+    uint8_t RxData[8];
+    if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &RxHeader, RxData) == HAL_OK)
+    {
+      if (RxHeader.Identifier >= 0x211 && RxHeader.Identifier <= 0x213)
+      {
+        uint8_t index = RxHeader.Identifier - 0x211;
+        uint32_t uid = RxData[0] | (RxData[1] << 8) | (RxData[2] << 16) | (RxData[3] << 24);
+        node_ids[index] = uid;
+        node_last_seen[index] = HAL_GetTick();
+      }
+    }
+  }
+}
 /* USER CODE END 4 */
 
 /**
