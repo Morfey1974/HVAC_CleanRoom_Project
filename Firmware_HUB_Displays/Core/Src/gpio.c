@@ -51,19 +51,17 @@ void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, MCU_DISPLAY_ID_5_Pin|MCU_DISPLAY_ID_6_Pin|MCU_DISPLAY_ID_7_Pin|MCU_DISPLAY_ID_8_Pin
-                          |MCU_DISPLAY_ID_9_Pin|MCU_DISPLAY_ID_4_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOC, MCU_DISPLAY_ID_8_Pin|MCU_DISPLAY_ID_9_Pin|MCU_DISPLAY_ID_7_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(MODUL_ID_OUT_GPIO_Port, MODUL_ID_OUT_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, MCU_DISPLAY_ID_2_Pin|MCU_DISPLAY_ID_1_Pin|MCU_DISPLAY_ID_3_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, MCU_DISPLAY_ID_2_Pin|MCU_DISPLAY_ID_1_Pin|MCU_DISPLAY_ID_3_Pin|MCU_DISPLAY_ID_4_Pin
+                          |MCU_DISPLAY_ID_5_Pin|MCU_DISPLAY_ID_6_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pins : MCU_DISPLAY_ID_5_Pin MCU_DISPLAY_ID_6_Pin MCU_DISPLAY_ID_7_Pin MCU_DISPLAY_ID_8_Pin
-                           MCU_DISPLAY_ID_9_Pin MCU_DISPLAY_ID_4_Pin */
-  GPIO_InitStruct.Pin = MCU_DISPLAY_ID_5_Pin|MCU_DISPLAY_ID_6_Pin|MCU_DISPLAY_ID_7_Pin|MCU_DISPLAY_ID_8_Pin
-                          |MCU_DISPLAY_ID_9_Pin|MCU_DISPLAY_ID_4_Pin;
+  /*Configure GPIO pins : MCU_DISPLAY_ID_8_Pin MCU_DISPLAY_ID_9_Pin MCU_DISPLAY_ID_7_Pin */
+  GPIO_InitStruct.Pin = MCU_DISPLAY_ID_8_Pin|MCU_DISPLAY_ID_9_Pin|MCU_DISPLAY_ID_7_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -82,8 +80,10 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(MODUL_ID_IN_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : MCU_DISPLAY_ID_2_Pin MCU_DISPLAY_ID_1_Pin MCU_DISPLAY_ID_3_Pin */
-  GPIO_InitStruct.Pin = MCU_DISPLAY_ID_2_Pin|MCU_DISPLAY_ID_1_Pin|MCU_DISPLAY_ID_3_Pin;
+  /*Configure GPIO pins : MCU_DISPLAY_ID_2_Pin MCU_DISPLAY_ID_1_Pin MCU_DISPLAY_ID_3_Pin MCU_DISPLAY_ID_4_Pin
+                           MCU_DISPLAY_ID_5_Pin MCU_DISPLAY_ID_6_Pin */
+  GPIO_InitStruct.Pin = MCU_DISPLAY_ID_2_Pin|MCU_DISPLAY_ID_1_Pin|MCU_DISPLAY_ID_3_Pin|MCU_DISPLAY_ID_4_Pin
+                          |MCU_DISPLAY_ID_5_Pin|MCU_DISPLAY_ID_6_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;

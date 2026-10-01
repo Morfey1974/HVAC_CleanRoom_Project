@@ -57,15 +57,9 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define MCU_DISPLAY_ID_5_Pin GPIO_PIN_11
-#define MCU_DISPLAY_ID_5_GPIO_Port GPIOC
-#define MCU_DISPLAY_ID_6_Pin GPIO_PIN_12
-#define MCU_DISPLAY_ID_6_GPIO_Port GPIOC
-#define MCU_DISPLAY_ID_7_Pin GPIO_PIN_13
-#define MCU_DISPLAY_ID_7_GPIO_Port GPIOC
-#define MCU_DISPLAY_ID_8_Pin GPIO_PIN_14
+#define MCU_DISPLAY_ID_8_Pin GPIO_PIN_11
 #define MCU_DISPLAY_ID_8_GPIO_Port GPIOC
-#define MCU_DISPLAY_ID_9_Pin GPIO_PIN_15
+#define MCU_DISPLAY_ID_9_Pin GPIO_PIN_12
 #define MCU_DISPLAY_ID_9_GPIO_Port GPIOC
 #define MODUL_ID_OUT_Pin GPIO_PIN_0
 #define MODUL_ID_OUT_GPIO_Port GPIOA
@@ -75,10 +69,16 @@ void Error_Handler(void);
 #define MCU_DISPLAY_ID_2_GPIO_Port GPIOB
 #define MCU_DISPLAY_ID_1_Pin GPIO_PIN_14
 #define MCU_DISPLAY_ID_1_GPIO_Port GPIOB
-#define MCU_DISPLAY_ID_3_Pin GPIO_PIN_9
+#define MCU_DISPLAY_ID_3_Pin GPIO_PIN_6
 #define MCU_DISPLAY_ID_3_GPIO_Port GPIOB
-#define MCU_DISPLAY_ID_4_Pin GPIO_PIN_10
-#define MCU_DISPLAY_ID_4_GPIO_Port GPIOC
+#define MCU_DISPLAY_ID_4_Pin GPIO_PIN_7
+#define MCU_DISPLAY_ID_4_GPIO_Port GPIOB
+#define MCU_DISPLAY_ID_5_Pin GPIO_PIN_8
+#define MCU_DISPLAY_ID_5_GPIO_Port GPIOB
+#define MCU_DISPLAY_ID_6_Pin GPIO_PIN_9
+#define MCU_DISPLAY_ID_6_GPIO_Port GPIOB
+#define MCU_DISPLAY_ID_7_Pin GPIO_PIN_10
+#define MCU_DISPLAY_ID_7_GPIO_Port GPIOC
 
 /* USER CODE BEGIN Private defines */
 

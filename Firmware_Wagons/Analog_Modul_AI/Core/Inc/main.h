@@ -57,6 +57,21 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define STM_CS_Pin GPIO_PIN_4
+#define STM_CS_GPIO_Port GPIOA
+#define STM_SCK_Pin GPIO_PIN_5
+#define STM_SCK_GPIO_Port GPIOA
+#define STM_MISO_Pin GPIO_PIN_6
+#define STM_MISO_GPIO_Port GPIOA
+#define STM_MOSI_Pin GPIO_PIN_7
+#define STM_MOSI_GPIO_Port GPIOA
+#define STM_DRDY_Pin GPIO_PIN_4
+#define STM_DRDY_GPIO_Port GPIOC
+#define STM_DRDY_EXTI_IRQn EXTI4_15_IRQn
+#define OUT_ID_AI_Pin GPIO_PIN_5
+#define OUT_ID_AI_GPIO_Port GPIOC
+#define IN_ID_AI_Pin GPIO_PIN_0
+#define IN_ID_AI_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 

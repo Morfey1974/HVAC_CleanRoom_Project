@@ -51,40 +51,20 @@ void MX_GPIO_Init(void)
   __HAL_RCC_GPIOA_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, NET_AI_1_Pin|NET_AI_2_Pin|NET_AI_3_Pin|NET_AI_4_Pin
-                          |NET_AI_5_Pin|NET_AI_6_Pin|NET_AI_7_Pin|NET_AI_8_Pin
-                          |NET_AI_9_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, ID_AI_Pin|MODUL_ID_OUT_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, NET_AI_10_Pin|NET_AI_11_Pin, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, NET_AI_12_Pin|NET_AI_13_Pin, GPIO_PIN_RESET);
-
-  /*Configure GPIO pins : NET_AI_1_Pin NET_AI_2_Pin NET_AI_3_Pin NET_AI_4_Pin
-                           NET_AI_5_Pin NET_AI_6_Pin NET_AI_7_Pin NET_AI_8_Pin
-                           NET_AI_9_Pin */
-  GPIO_InitStruct.Pin = NET_AI_1_Pin|NET_AI_2_Pin|NET_AI_3_Pin|NET_AI_4_Pin
-                          |NET_AI_5_Pin|NET_AI_6_Pin|NET_AI_7_Pin|NET_AI_8_Pin
-                          |NET_AI_9_Pin;
+  /*Configure GPIO pins : ID_AI_Pin MODUL_ID_OUT_Pin */
+  GPIO_InitStruct.Pin = ID_AI_Pin|MODUL_ID_OUT_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : NET_AI_10_Pin NET_AI_11_Pin */
-  GPIO_InitStruct.Pin = NET_AI_10_Pin|NET_AI_11_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  /*Configure GPIO pin : MODUL_ID_IN_Pin */
+  GPIO_InitStruct.Pin = MODUL_ID_IN_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : NET_AI_12_Pin NET_AI_13_Pin */
-  GPIO_InitStruct.Pin = NET_AI_12_Pin|NET_AI_13_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+  HAL_GPIO_Init(MODUL_ID_IN_GPIO_Port, &GPIO_InitStruct);
 
 }
 

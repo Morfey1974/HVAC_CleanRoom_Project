@@ -55,7 +55,7 @@
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
-extern FDCAN_HandleTypeDef hfdcan1;
+extern FDCAN_HandleTypeDef hfdcan2;
 /* USER CODE BEGIN EV */
 
 /* USER CODE END EV */
@@ -141,6 +141,20 @@ void SysTick_Handler(void)
 /******************************************************************************/
 
 /**
+  * @brief This function handles EXTI line 4 to 15 interrupts.
+  */
+void EXTI4_15_IRQHandler(void)
+{
+  /* USER CODE BEGIN EXTI4_15_IRQn 0 */
+
+  /* USER CODE END EXTI4_15_IRQn 0 */
+  HAL_GPIO_EXTI_IRQHandler(STM_DRDY_Pin);
+  /* USER CODE BEGIN EXTI4_15_IRQn 1 */
+
+  /* USER CODE END EXTI4_15_IRQn 1 */
+}
+
+/**
   * @brief This function handles TIM16, FDCAN1_IT0 and FDCAN2_IT0 Interrupt.
   */
 void TIM16_FDCAN_IT0_IRQHandler(void)
@@ -148,7 +162,7 @@ void TIM16_FDCAN_IT0_IRQHandler(void)
   /* USER CODE BEGIN TIM16_FDCAN_IT0_IRQn 0 */
 
   /* USER CODE END TIM16_FDCAN_IT0_IRQn 0 */
-  HAL_FDCAN_IRQHandler(&hfdcan1);
+  HAL_FDCAN_IRQHandler(&hfdcan2);
   /* USER CODE BEGIN TIM16_FDCAN_IT0_IRQn 1 */
 
   /* USER CODE END TIM16_FDCAN_IT0_IRQn 1 */
@@ -162,7 +176,7 @@ void TIM17_FDCAN_IT1_IRQHandler(void)
   /* USER CODE BEGIN TIM17_FDCAN_IT1_IRQn 0 */
 
   /* USER CODE END TIM17_FDCAN_IT1_IRQn 0 */
-  HAL_FDCAN_IRQHandler(&hfdcan1);
+  HAL_FDCAN_IRQHandler(&hfdcan2);
   /* USER CODE BEGIN TIM17_FDCAN_IT1_IRQn 1 */
 
   /* USER CODE END TIM17_FDCAN_IT1_IRQn 1 */

@@ -57,32 +57,12 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define NET_AI_1_Pin GPIO_PIN_0
-#define NET_AI_1_GPIO_Port GPIOB
-#define NET_AI_2_Pin GPIO_PIN_1
-#define NET_AI_2_GPIO_Port GPIOB
-#define NET_AI_3_Pin GPIO_PIN_2
-#define NET_AI_3_GPIO_Port GPIOB
-#define NET_AI_4_Pin GPIO_PIN_10
-#define NET_AI_4_GPIO_Port GPIOB
-#define NET_AI_5_Pin GPIO_PIN_11
-#define NET_AI_5_GPIO_Port GPIOB
-#define NET_AI_6_Pin GPIO_PIN_12
-#define NET_AI_6_GPIO_Port GPIOB
-#define NET_AI_7_Pin GPIO_PIN_13
-#define NET_AI_7_GPIO_Port GPIOB
-#define NET_AI_8_Pin GPIO_PIN_14
-#define NET_AI_8_GPIO_Port GPIOB
-#define NET_AI_9_Pin GPIO_PIN_15
-#define NET_AI_9_GPIO_Port GPIOB
-#define NET_AI_10_Pin GPIO_PIN_8
-#define NET_AI_10_GPIO_Port GPIOA
-#define NET_AI_11_Pin GPIO_PIN_9
-#define NET_AI_11_GPIO_Port GPIOA
-#define NET_AI_12_Pin GPIO_PIN_6
-#define NET_AI_12_GPIO_Port GPIOC
-#define NET_AI_13_Pin GPIO_PIN_7
-#define NET_AI_13_GPIO_Port GPIOC
+#define ID_AI_Pin GPIO_PIN_0
+#define ID_AI_GPIO_Port GPIOB
+#define MODUL_ID_OUT_Pin GPIO_PIN_13
+#define MODUL_ID_OUT_GPIO_Port GPIOB
+#define MODUL_ID_IN_Pin GPIO_PIN_14
+#define MODUL_ID_IN_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 

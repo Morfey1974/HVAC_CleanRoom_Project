@@ -42,10 +42,49 @@
 void MX_GPIO_Init(void)
 {
 
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOF_CLK_ENABLE();
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(STM_CS_GPIO_Port, STM_CS_Pin, GPIO_PIN_SET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(OUT_ID_AI_GPIO_Port, OUT_ID_AI_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin : STM_CS_Pin */
+  GPIO_InitStruct.Pin = STM_CS_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(STM_CS_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : STM_DRDY_Pin */
+  GPIO_InitStruct.Pin = STM_DRDY_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(STM_DRDY_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : OUT_ID_AI_Pin */
+  GPIO_InitStruct.Pin = OUT_ID_AI_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(OUT_ID_AI_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : IN_ID_AI_Pin */
+  GPIO_InitStruct.Pin = IN_ID_AI_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(IN_ID_AI_GPIO_Port, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI4_15_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI4_15_IRQn);
 
 }
 

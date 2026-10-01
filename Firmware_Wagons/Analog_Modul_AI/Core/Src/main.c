@@ -19,11 +19,13 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "fdcan.h"
+#include "spi.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "ads1220.h"
+#include "hvac_can.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -33,7 +35,24 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+/* ADS1220 inputs: 4-20 mA over 250 Ohm (1-5 V), scaled x0.2 by INA159 */
+#define AI_MUX_HUMIDITY     0x0Au   /* AIN2, terminal H3, transmitter output 1 */
+#define AI_MUX_TEMPERATURE  0x09u   /* AIN1, terminal H4, transmitter output 2 */
+#define AI_FRONTEND_GAIN    5.0f    /* ADC volts -> volts on the 250 Ohm shunt */
+#define AI_SHUNT_OHM        250.0f
 
+#define AI_LOOP_MIN_MA      3.6f    /* below: open loop */
+#define AI_LOOP_MAX_MA      21.0f   /* above: short / overrange */
+
+/* Rotronic HF5: humidity is always 0..100 %RH; the temperature scale depends on
+ * the order code on the label (digit after the probe code): 1 = 0..50 C,
+ * 2 = 10..40 C, 3 = -40..60 C, 4 = -30..70 C, 5 = -40..85 C. */
+#define AI_HUM_MIN          0.0f
+#define AI_HUM_MAX          100.0f
+#define AI_TEMP_MIN         0.0f
+#define AI_TEMP_MAX         50.0f
+
+#define AI_SEND_PERIOD_MS   500u
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -55,7 +74,24 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+/* Converts one 4-20 mA channel to engineering units; returns 0 if the loop is faulty. */
+static uint8_t AI_ReadLoop(uint8_t mux, float lo, float hi, float *value, uint8_t *adc_fault)
+{
+  float v_adc;
+  if (ADS1220_ReadVoltage(mux, &v_adc) != HAL_OK)
+  {
+    *adc_fault = 1u;
+    return 0u;
+  }
+  float ma = v_adc * AI_FRONTEND_GAIN / AI_SHUNT_OHM * 1000.0f;
+  if (ma < AI_LOOP_MIN_MA || ma > AI_LOOP_MAX_MA) return 0u;
 
+  float v = lo + (ma - 4.0f) * (hi - lo) / 16.0f;
+  if (v < lo) v = lo;
+  if (v > hi) v = hi;
+  *value = v;
+  return 1u;
+}
 /* USER CODE END 0 */
 
 /**
@@ -87,15 +123,54 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_FDCAN1_Init();
+  MX_FDCAN2_Init();
+  MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
+  ADS1220_Init();
 
+  FDCAN_TxHeaderTypeDef TxHeader;
+  TxHeader.Identifier = HVAC_CAN_ID_AI_MEAS;
+  TxHeader.IdType = FDCAN_STANDARD_ID;
+  TxHeader.TxFrameType = FDCAN_DATA_FRAME;
+  TxHeader.DataLength = FDCAN_DLC_BYTES_8;
+  TxHeader.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
+  TxHeader.BitRateSwitch = FDCAN_BRS_OFF;
+  TxHeader.FDFormat = FDCAN_CLASSIC_CAN;
+  TxHeader.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
+  TxHeader.MessageMarker = 0;
+  
+  HAL_FDCAN_Start(&hfdcan2);
+
+  HvacAiMeas meas = {0};
+  uint32_t last_send = HAL_GetTick() - AI_SEND_PERIOD_MS;
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    if (hfdcan2.Instance->PSR & FDCAN_PSR_BO) {
+        HAL_FDCAN_Stop(&hfdcan2);
+        HAL_FDCAN_Start(&hfdcan2);
+    }
+
+    if (HAL_GetTick() - last_send >= AI_SEND_PERIOD_MS)
+    {
+      last_send = HAL_GetTick();
+
+      uint8_t adc_fault = 0u;
+      meas.status = 0u;
+      if (!AI_ReadLoop(AI_MUX_HUMIDITY, AI_HUM_MIN, AI_HUM_MAX, &meas.humidity_pct, &adc_fault))
+        meas.status |= HVAC_AI_ST_HUM_FAULT;
+      if (!AI_ReadLoop(AI_MUX_TEMPERATURE, AI_TEMP_MIN, AI_TEMP_MAX, &meas.temperature_c, &adc_fault))
+        meas.status |= HVAC_AI_ST_TEMP_FAULT;
+      if (adc_fault) meas.status |= HVAC_AI_ST_ADC_FAULT;
+      meas.counter++;
+
+      uint8_t tx_data[8];
+      hvac_can_ai_encode(&meas, tx_data);
+      HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan2, &TxHeader, tx_data);
+    }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
