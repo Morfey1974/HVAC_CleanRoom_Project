@@ -57,20 +57,26 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define OSC_IN_Pin GPIO_PIN_14
-#define OSC_IN_GPIO_Port GPIOC
-#define OSC_OUT_Pin GPIO_PIN_15
-#define OSC_OUT_GPIO_Port GPIOC
+#define QSPI_IO2_Pin GPIO_PIN_2
+#define QSPI_IO2_GPIO_Port GPIOE
+#define MCU_MODUL_ID_OUT_AI_Pin GPIO_PIN_3
+#define MCU_MODUL_ID_OUT_AI_GPIO_Port GPIOE
+#define MCU_MODUL_ID_OUT_DISPLAY_Pin GPIO_PIN_4
+#define MCU_MODUL_ID_OUT_DISPLAY_GPIO_Port GPIOE
+#define I2C2_SDA_EEPROM_Pin GPIO_PIN_0
+#define I2C2_SDA_EEPROM_GPIO_Port GPIOF
+#define I2C2_SCL_EEPROM_Pin GPIO_PIN_1
+#define I2C2_SCL_EEPROM_GPIO_Port GPIOF
 #define QSPI_IO3_Pin GPIO_PIN_6
 #define QSPI_IO3_GPIO_Port GPIOF
-#define QSPI_IO2_Pin GPIO_PIN_7
-#define QSPI_IO2_GPIO_Port GPIOF
 #define QSPI_IO0_Pin GPIO_PIN_8
 #define QSPI_IO0_GPIO_Port GPIOF
 #define QSPI_IO1_Pin GPIO_PIN_9
 #define QSPI_IO1_GPIO_Port GPIOF
 #define QSPI_CLK_Pin GPIO_PIN_10
 #define QSPI_CLK_GPIO_Port GPIOF
+#define ETH_NRST_Pin GPIO_PIN_0
+#define ETH_NRST_GPIO_Port GPIOC
 #define RMII_MDC_Pin GPIO_PIN_1
 #define RMII_MDC_GPIO_Port GPIOC
 #define RMII_REF_CLK_Pin GPIO_PIN_1
@@ -91,6 +97,8 @@ void Error_Handler(void);
 #define USART3_TX_GPIO_Port GPIOD
 #define USART3_RX_Pin GPIO_PIN_9
 #define USART3_RX_GPIO_Port GPIOD
+#define LED_STATUS_Pin GPIO_PIN_2
+#define LED_STATUS_GPIO_Port GPIOG
 #define SWDIO_Pin GPIO_PIN_13
 #define SWDIO_GPIO_Port GPIOA
 #define SWCLK_Pin GPIO_PIN_14
@@ -99,6 +107,8 @@ void Error_Handler(void);
 #define RMII_TX_EN_GPIO_Port GPIOG
 #define RMII_TXD0_Pin GPIO_PIN_13
 #define RMII_TXD0_GPIO_Port GPIOG
+#define MODUL_ID_OUT_BUS_Pin GPIO_PIN_1
+#define MODUL_ID_OUT_BUS_GPIO_Port GPIOE
 
 /* USER CODE BEGIN Private defines */
 

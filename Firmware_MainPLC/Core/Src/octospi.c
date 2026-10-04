@@ -96,17 +96,24 @@ void HAL_OSPI_MspInit(OSPI_HandleTypeDef* ospiHandle)
     __HAL_RCC_OCTOSPIM_CLK_ENABLE();
     __HAL_RCC_OSPI1_CLK_ENABLE();
 
-    __HAL_RCC_GPIOF_CLK_ENABLE();
     __HAL_RCC_GPIOE_CLK_ENABLE();
+    __HAL_RCC_GPIOF_CLK_ENABLE();
     /**OCTOSPI1 GPIO Configuration
+    PE2     ------> OCTOSPIM_P1_IO2
     PF6     ------> OCTOSPIM_P1_IO3
-    PF7     ------> OCTOSPIM_P1_IO2
     PF8     ------> OCTOSPIM_P1_IO0
     PF9     ------> OCTOSPIM_P1_IO1
     PF10     ------> OCTOSPIM_P1_CLK
     PE11     ------> OCTOSPIM_P1_NCS
     */
-    GPIO_InitStruct.Pin = QSPI_IO3_Pin|QSPI_IO2_Pin|QSPI_IO0_Pin|QSPI_IO1_Pin;
+    GPIO_InitStruct.Pin = QSPI_IO2_Pin;
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+    GPIO_InitStruct.Alternate = GPIO_AF9_OCTOSPIM_P1;
+    HAL_GPIO_Init(QSPI_IO2_GPIO_Port, &GPIO_InitStruct);
+
+    GPIO_InitStruct.Pin = QSPI_IO3_Pin|QSPI_IO0_Pin|QSPI_IO1_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
@@ -146,17 +153,16 @@ void HAL_OSPI_MspDeInit(OSPI_HandleTypeDef* ospiHandle)
     __HAL_RCC_OSPI1_CLK_DISABLE();
 
     /**OCTOSPI1 GPIO Configuration
+    PE2     ------> OCTOSPIM_P1_IO2
     PF6     ------> OCTOSPIM_P1_IO3
-    PF7     ------> OCTOSPIM_P1_IO2
     PF8     ------> OCTOSPIM_P1_IO0
     PF9     ------> OCTOSPIM_P1_IO1
     PF10     ------> OCTOSPIM_P1_CLK
     PE11     ------> OCTOSPIM_P1_NCS
     */
-    HAL_GPIO_DeInit(GPIOF, QSPI_IO3_Pin|QSPI_IO2_Pin|QSPI_IO0_Pin|QSPI_IO1_Pin
-                          |QSPI_CLK_Pin);
+    HAL_GPIO_DeInit(GPIOE, QSPI_IO2_Pin|QSPI_NCS_Pin);
 
-    HAL_GPIO_DeInit(QSPI_NCS_GPIO_Port, QSPI_NCS_Pin);
+    HAL_GPIO_DeInit(GPIOF, QSPI_IO3_Pin|QSPI_IO0_Pin|QSPI_IO1_Pin|QSPI_CLK_Pin);
 
   /* USER CODE BEGIN OCTOSPI1_MspDeInit 1 */
 
@@ -167,3 +173,4 @@ void HAL_OSPI_MspDeInit(OSPI_HandleTypeDef* ospiHandle)
 /* USER CODE BEGIN 1 */
 
 /* USER CODE END 1 */
+

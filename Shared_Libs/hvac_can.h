@@ -1,10 +1,11 @@
 /*
- * hvac_can.h — CAN frames shared by AI module, Locomotive, HUB and display boards.
+ * hvac_can.h — CAN frames shared by AI module, Locomotive, Main PLC, HUB and display boards.
  *
  * All buses: classic CAN, 11-bit IDs, 50 kbit/s.
  *
  * Path of the AI measurement frame:
- *   AI CAN2 -> Locomotive CAN1 -> Locomotive CAN2 -> HUB CAN2 -> HUB CAN1 -> Display CAN1
+ *   AI CAN2 -> Locomotive CAN1 -> Locomotive CAN2 -> Main PLC CAN1 -> Main PLC CAN2
+ *   -> HUB CAN2 -> HUB CAN1 -> Display CAN1
  */
 #ifndef HVAC_CAN_H
 #define HVAC_CAN_H
@@ -24,9 +25,9 @@
 #define HVAC_AI_ST_HUM_FAULT      0x01u /* humidity loop below 3.6 mA (open) or above 21 mA */
 #define HVAC_AI_ST_TEMP_FAULT     0x02u /* temperature loop below 3.6 mA (open) or above 21 mA */
 #define HVAC_AI_ST_ADC_FAULT      0x04u /* ADS1220 did not answer */
-#define HVAC_AI_ST_NO_LINK        0x80u /* set by the locomotive: AI module silent */
+#define HVAC_AI_ST_NO_LINK        0x80u /* set by the locomotive (AI silent) or the Main PLC (locomotive silent) */
 
-#define HVAC_AI_LINK_TIMEOUT_MS   2000u /* locomotive: AI silent this long -> NO_LINK frames */
+#define HVAC_AI_LINK_TIMEOUT_MS   2000u /* upstream silent this long -> NO_LINK frames */
 #define HVAC_AI_NO_LINK_PERIOD_MS 500u
 #define HVAC_DISPLAY_TIMEOUT_MS   3000u /* display: no AI frame this long -> show fault */
 
@@ -69,5 +70,20 @@ static inline void hvac_can_ai_decode(const uint8_t d[8], HvacAiMeas *m)
   m->status = d[4];
   m->counter = d[5];
 }
+
+/* Doors state, read by the Main PLC from the DCM door controller over Modbus RTU
+ * and sent by the Main PLC on CAN2 -> HUB -> Display. DLC 4.
+ *   [0] closed mask: bit N = door N+1 (D-03..D-07), 1 = closed, 0 = open
+ *   [1] status, HVAC_DOORS_ST_*
+ *   [2] frame counter, incremented by the Main PLC
+ *   [3] reserved, 0
+ */
+#define HVAC_CAN_ID_DOORS         0x310u
+#define HVAC_CAN_DOORS_DLC        4u
+#define HVAC_DOORS_COUNT          5u
+#define HVAC_DOORS_MASK           0x1Fu
+#define HVAC_DOORS_ST_NO_LINK     0x80u /* DCM did not answer 3 polls in a row */
+#define HVAC_DOORS_PERIOD_MS      500u
+#define HVAC_DOORS_TIMEOUT_MS     3000u /* display: no doors frame this long -> no link */
 
 #endif /* HVAC_CAN_H */

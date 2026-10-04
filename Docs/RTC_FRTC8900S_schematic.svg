@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="720" viewBox="0 0 1100 720" font-family="Arial, sans-serif">
+  <rect width="1100" height="720" fill="#fdfaf3"/>
+  <text x="30" y="40" font-size="20" fill="#222" font-weight="bold">Часы реального времени на Nyfea FRTC8900S (эскиз)</text>
+
+  <g stroke="#1a8f1a" stroke-width="2" fill="none">
+    <line x1="260" y1="110" x2="960" y2="110"/>
+    <polyline points="380,220 330,220 330,110"/>
+    <line x1="260" y1="110" x2="260" y2="145"/>
+    <line x1="260" y1="155" x2="260" y2="185"/>
+    <line x1="380" y1="270" x2="280" y2="270"/>
+    <polyline points="250,270 180,270 180,320"/>
+    <line x1="180" y1="330" x2="180" y2="520"/>
+    <line x1="180" y1="520" x2="840" y2="520"/>
+    <line x1="520" y1="520" x2="520" y2="540"/>
+    <polyline points="380,320 350,320 350,520"/>
+    <line x1="380" y1="420" x2="350" y2="420"/>
+    <line x1="660" y1="220" x2="880" y2="220"/>
+    <line x1="660" y1="260" x2="880" y2="260"/>
+    <line x1="780" y1="110" x2="780" y2="135"/>
+    <line x1="780" y1="180" x2="780" y2="220"/>
+    <line x1="720" y1="110" x2="720" y2="135"/>
+    <line x1="720" y1="180" x2="720" y2="260"/>
+    <polyline points="880,300 820,300 820,110"/>
+    <polyline points="880,340 840,340 840,520"/>
+    <line x1="960" y1="110" x2="960" y2="82"/>
+    <path d="M652,312 L668,328 M652,328 L668,312"/>
+    <path d="M652,352 L668,368 M652,368 L668,352"/>
+    <path d="M652,392 L668,408 M652,408 L668,392"/>
+    <path d="M652,432 L668,448 M652,448 L668,432"/>
+    <path d="M392,602 L408,618 M392,618 L408,602"/>
+    <path d="M392,632 L408,648 M392,648 L408,632"/>
+    <path d="M592,602 L608,618 M592,618 L608,602"/>
+    <path d="M592,632 L608,648 M592,648 L608,632"/>
+  </g>
+
+  <g fill="#b00000">
+    <circle cx="330" cy="110" r="4"/>
+    <circle cx="720" cy="110" r="4"/>
+    <circle cx="780" cy="110" r="4"/>
+    <circle cx="820" cy="110" r="4"/>
+    <circle cx="780" cy="220" r="4"/>
+    <circle cx="720" cy="260" r="4"/>
+    <circle cx="350" cy="420" r="4"/>
+    <circle cx="350" cy="520" r="4"/>
+    <circle cx="520" cy="520" r="4"/>
+    <circle cx="840" cy="520" r="4"/>
+  </g>
+
+  <g stroke="#b00000" stroke-width="2" fill="none">
+    <rect x="420" y="190" width="200" height="270" fill="#fffbe6"/>
+    <line x1="380" y1="220" x2="420" y2="220"/>
+    <line x1="380" y1="270" x2="420" y2="270"/>
+    <line x1="380" y1="320" x2="420" y2="320"/>
+    <line x1="380" y1="420" x2="420" y2="420"/>
+    <line x1="620" y1="220" x2="660" y2="220"/>
+    <line x1="620" y1="260" x2="660" y2="260"/>
+    <line x1="620" y1="320" x2="660" y2="320"/>
+    <line x1="620" y1="360" x2="660" y2="360"/>
+    <line x1="620" y1="400" x2="660" y2="400"/>
+    <line x1="620" y1="440" x2="660" y2="440"/>
+    <line x1="240" y1="145" x2="280" y2="145"/>
+    <line x1="240" y1="155" x2="280" y2="155"/>
+    <polygon points="250,258 250,282 280,270" fill="#fffbe6"/>
+    <line x1="280" y1="258" x2="280" y2="282"/>
+    <line x1="160" y1="320" x2="200" y2="320"/>
+    <line x1="170" y1="330" x2="190" y2="330" stroke-width="5"/>
+    <rect x="772" y="135" width="16" height="45" fill="#fffbe6"/>
+    <rect x="712" y="135" width="16" height="45" fill="#fffbe6"/>
+    <rect x="880" y="200" width="40" height="160" fill="#fffbe6"/>
+    <rect x="440" y="590" width="120" height="75" fill="#fffbe6"/>
+    <line x1="400" y1="610" x2="440" y2="610"/>
+    <line x1="400" y1="640" x2="440" y2="640"/>
+    <line x1="560" y1="610" x2="600" y2="610"/>
+    <line x1="560" y1="640" x2="600" y2="640"/>
+  </g>
+
+  <g stroke="#222" stroke-width="2">
+    <line x1="245" y1="185" x2="275" y2="185"/>
+    <line x1="250" y1="191" x2="270" y2="191"/>
+    <line x1="255" y1="197" x2="265" y2="197"/>
+    <line x1="505" y1="540" x2="535" y2="540"/>
+    <line x1="510" y1="546" x2="530" y2="546"/>
+    <line x1="515" y1="552" x2="525" y2="552"/>
+    <line x1="950" y1="82" x2="970" y2="82"/>
+  </g>
+  <text x="520" y="572" font-size="14" text-anchor="middle" fill="#222" font-weight="bold">GND</text>
+  <text x="260" y="215" font-size="12" text-anchor="middle" fill="#222">GND</text>
+  <text x="960" y="72" font-size="14" text-anchor="middle" fill="#222" font-weight="bold">+3V3</text>
+
+  <g font-size="13" fill="#1f3fbf">
+    <text x="420" y="182" font-weight="bold">U1</text>
+    <text x="520" y="478" text-anchor="middle">FRTC8900S (SOP-14)</text>
+  </g>
+  <g font-size="12" fill="#b00000">
+    <text x="400" y="215" text-anchor="middle">6</text>
+    <text x="400" y="265" text-anchor="middle">5</text>
+    <text x="400" y="315" text-anchor="middle">7</text>
+    <text x="400" y="415" text-anchor="middle">11</text>
+    <text x="640" y="215" text-anchor="middle">2</text>
+    <text x="640" y="255" text-anchor="middle">13</text>
+    <text x="640" y="315" text-anchor="middle">10</text>
+    <text x="640" y="355" text-anchor="middle">3</text>
+    <text x="640" y="395" text-anchor="middle">1</text>
+    <text x="640" y="435" text-anchor="middle">12</text>
+    <text x="420" y="605" text-anchor="middle">4</text>
+    <text x="420" y="635" text-anchor="middle">8</text>
+    <text x="580" y="605" text-anchor="middle">9</text>
+    <text x="580" y="635" text-anchor="middle">14</text>
+    <text x="870" y="215" text-anchor="middle">1</text>
+    <text x="870" y="255" text-anchor="middle">2</text>
+    <text x="870" y="295" text-anchor="middle">3</text>
+    <text x="870" y="335" text-anchor="middle">4</text>
+  </g>
+  <g font-size="13" fill="#222">
+    <text x="428" y="224">VDD</text>
+    <text x="428" y="274">VBAT</text>
+    <text x="428" y="324">FOE</text>
+    <text x="428" y="424">GND</text>
+    <text x="612" y="224" text-anchor="end">SCL</text>
+    <text x="612" y="264" text-anchor="end">SDA</text>
+    <text x="612" y="324" text-anchor="end">/INT</text>
+    <text x="612" y="364" text-anchor="end">FOUT</text>
+    <text x="612" y="404" text-anchor="end">T1</text>
+    <text x="612" y="444" text-anchor="end">T2</text>
+    <text x="448" y="614">NC</text>
+    <text x="448" y="644">NC</text>
+    <text x="552" y="614" text-anchor="end">NC</text>
+    <text x="552" y="644" text-anchor="end">NC</text>
+    <text x="928" y="224">SCL</text>
+    <text x="928" y="264">SDA</text>
+    <text x="928" y="304">+3V3</text>
+    <text x="928" y="344">GND</text>
+  </g>
+  <g font-size="11" fill="#777">
+    <text x="676" y="336">не используется</text>
+    <text x="676" y="376">не используется</text>
+    <text x="676" y="416">не подключать</text>
+    <text x="676" y="456">не подключать</text>
+  </g>
+
+  <g font-size="13" fill="#1f3fbf">
+    <text x="290" y="142" font-weight="bold">C1</text>
+    <text x="290" y="160">100nF</text>
+    <text x="265" y="248" text-anchor="middle" font-weight="bold">D1</text>
+    <text x="265" y="302" text-anchor="middle">BAT54</text>
+    <text x="265" y="317" text-anchor="middle">(Шоттки)</text>
+    <text x="206" y="317" fill="#b00000">+</text>
+    <text x="60" y="345" font-weight="bold">B1</text>
+    <text x="60" y="362">батарейка CR</text>
+    <text x="60" y="378">BS-02-A1AJ010</text>
+    <text x="796" y="152" font-weight="bold">R1</text>
+    <text x="796" y="170">4.7kΩ</text>
+    <text x="704" y="152" text-anchor="end" font-weight="bold">R2</text>
+    <text x="704" y="170" text-anchor="end">4.7kΩ</text>
+    <text x="880" y="190" font-weight="bold">U2</text>
+    <text x="900" y="380" text-anchor="middle">X6511WRS-04H</text>
+    <text x="500" y="582" text-anchor="middle">U1.2 — свободные выводы</text>
+  </g>
+
+  <rect x="640" y="570" width="450" height="135" fill="#ffffff" stroke="#999" stroke-width="1"/>
+  <g font-size="13" fill="#222">
+    <text x="652" y="592" font-weight="bold">Примечания</text>
+    <text x="652" y="614">• D1 обязателен: не даёт заряжать батарейку CR</text>
+    <text x="652" y="634">• T1, T2 — тестовые выводы, никуда не подключать</text>
+    <text x="652" y="654">• FOE на GND — выход 32 кГц выключен</text>
+    <text x="652" y="674">• /INT, FOUT, 4, 8, 9, 14 можно оставить свободными</text>
+    <text x="652" y="694">• Адрес на шине I2C: 0x32</text>
+  </g>
+</svg>

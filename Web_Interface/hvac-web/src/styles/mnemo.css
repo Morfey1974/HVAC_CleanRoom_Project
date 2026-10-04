@@ -1,0 +1,111 @@
+/* Mimic diagrams: dark canvas for contrast of live colours. The diagram itself never mirrors in RTL. */
+:root {
+  --mn-bg: #0f172a;
+  --mn-text: #e2e8f0;
+  --mn-muted: #94a3b8;
+}
+
+.mn-wrap {
+  position: relative;
+  direction: ltr;
+}
+
+.mn-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  font-family: 'Segoe UI', Arial, sans-serif;
+}
+
+.mn-label {
+  fill: var(--mn-text);
+}
+
+.mn-caption {
+  fill: #475569;
+  font-size: 11px;
+}
+
+.mn-small {
+  fill: var(--mn-muted);
+  font-size: 11px;
+}
+
+.mn-small-dark {
+  fill: #334155;
+  font-size: 11px;
+}
+
+.mn-value {
+  fill: #fff;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.mn-tag {
+  fill: #0b1222;
+  stroke: #22d3ee;
+  stroke-width: 1.5;
+}
+
+.mn-tag-text {
+  fill: #22d3ee;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.mn-duct {
+  fill: #1e293b;
+  stroke: #334155;
+  stroke-width: 2;
+}
+
+.mn-flow {
+  fill: none;
+  stroke-linecap: round;
+  stroke-dasharray: 14 18;
+  transition: opacity 0.4s;
+}
+
+.mn-transition {
+  transition: stroke 0.4s, transform 0.4s;
+}
+
+.mn-click {
+  cursor: pointer;
+}
+
+.mn-click:hover {
+  filter: brightness(1.15);
+}
+
+.mn-alarm {
+  animation: mn-alarm 1s steps(2) infinite;
+}
+
+@keyframes mn-alarm {
+  50% {
+    opacity: 0.2;
+  }
+}
+
+.mn-card {
+  position: fixed;
+  z-index: 60;
+  min-width: 240px;
+  margin-top: 0;
+  font-size: 0.9rem;
+  border-color: var(--primary);
+  direction: inherit;
+}
+
+.mn-card strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: var(--palette-turquoise-dark);
+}
+
+.mn-card__alarm {
+  color: #b91c1c;
+  font-weight: 600;
+}

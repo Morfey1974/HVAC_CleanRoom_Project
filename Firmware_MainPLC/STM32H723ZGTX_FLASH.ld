@@ -155,6 +155,23 @@ SECTIONS
     __bss_end__ = _ebss;
   } >RAM_D1
 
+  /* Ethernet DMA descriptors and RX pool: D2 SRAM, non-cacheable by MPU region 3.
+     The lwIP heap (LWIP_RAM_HEAP_POINTER in lwipopts.h) starts right after. */
+  .eth_dma (NOLOAD) :
+  {
+    . = ALIGN(32);
+    *(.RxDescripSection)
+    *(.RxDecripSection)
+    . = ALIGN(32);
+    *(.TxDescripSection)
+    *(.TxDecripSection)
+    . = ALIGN(32);
+    *(.Rx_PoolSection)
+    . = ALIGN(32);
+    _eth_dma_end = .;
+  } >RAM_D2
+  ASSERT(_eth_dma_end <= 0x30005000, "ETH DMA area overlaps lwIP heap at 0x30005000")
+
   /* User_heap_stack section, used to check that there is enough RAM left */
   ._user_heap_stack :
   {

@@ -1,0 +1,16 @@
+/* User-generated text: Hebrew + embedded Latin in any UI language. */
+.bidi-auto {
+  unicode-bidi: plaintext;
+  text-align: start;
+}
+
+/* Technical values (ranges, IP, versions, units) never flip inside RTL text. */
+.ltr-value {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+td.ltr-value {
+  unicode-bidi: plaintext;
+  text-align: start;
+}

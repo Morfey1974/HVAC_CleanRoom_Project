@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>HVAC CleanRoom — мнемосхема (демо по P&ID NanoMotion 26000017-HVAC-W)</title>
+<style>
+  :root {
+    --bg: #0f172a; --panel: #111c33; --line: #1e2a44; --text: #e2e8f0; --muted: #94a3b8;
+    --accent: #38bdf8; --ok: #22c55e; --warn: #f59e0b; --alarm: #ef4444;
+    --metal1: #cbd5e1; --metal2: #94a3b8; --metal3: #64748b;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: "Segoe UI", Arial, sans-serif; }
+  header { display: flex; align-items: center; gap: 16px; padding: 10px 18px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 17px; margin: 0; font-weight: 600; }
+  header .sub { color: var(--muted); font-size: 13px; }
+  header .spacer { flex: 1; }
+  .lang button { background: transparent; color: var(--muted); border: 1px solid var(--line); padding: 4px 9px; cursor: pointer; border-radius: 4px; }
+  .lang button.on { color: var(--text); border-color: var(--accent); }
+  .bell { position: relative; cursor: pointer; font-size: 22px; user-select: none; }
+  .bell .cnt { position: absolute; top: -6px; right: -10px; background: var(--alarm); color: #fff; border-radius: 9px; font-size: 11px; padding: 1px 6px; }
+  .bell.active { color: var(--alarm); animation: blink 1s steps(2) infinite; }
+  .wrap { display: flex; }
+  .scene { flex: 1; padding: 8px; }
+  svg { width: 100%; height: auto; display: block; }
+  aside { width: 300px; background: var(--panel); border-left: 1px solid var(--line); padding: 14px; font-size: 13px; min-height: calc(100vh - 52px); }
+  aside h3 { margin: 14px 0 6px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  aside label { display: flex; justify-content: space-between; margin: 6px 0 2px; }
+  aside input[type=range] { width: 100%; }
+  aside select { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--line); padding: 4px; }
+  .chk { display: flex; gap: 6px; align-items: center; margin: 4px 0; }
+  .note { color: var(--muted); font-size: 11px; margin-top: 12px; line-height: 1.4; }
+  #alarms { position: fixed; top: 56px; right: 320px; width: 360px; background: var(--panel); border: 1px solid var(--alarm); border-radius: 6px; padding: 10px 12px; display: none; font-size: 13px; z-index: 5; }
+  #alarms li { margin: 4px 0; }
+  #card { position: fixed; background: var(--panel); border: 1px solid var(--accent); border-radius: 6px; padding: 10px 12px; font-size: 13px; display: none; z-index: 6; min-width: 220px; }
+  #card b { display: block; margin-bottom: 6px; color: var(--accent); }
+  [dir=rtl] aside, [dir=rtl] #alarms, [dir=rtl] #card { text-align: right; }
+
+  /* SVG */
+  .lbl { fill: var(--text); font-size: 13px; }
+  .lbl-s { fill: var(--muted); font-size: 11px; }
+  .val { fill: #fff; font-size: 13px; font-weight: 600; }
+  .tag { fill: #0b1222; stroke: #22d3ee; stroke-width: 1.5; }
+  .tag-t { fill: #22d3ee; font-size: 10px; font-weight: 700; text-anchor: middle; }
+  .flow { fill: none; stroke-width: 6; stroke-linecap: round; stroke-dasharray: 14 18; }
+  .flow-supply { stroke: #e879f9; }
+  .flow-fresh { stroke: #fb923c; }
+  .flow-room { stroke: #4ade80; stroke-width: 4; }
+  .flow-ac { stroke: #a3a36b; stroke-width: 4; }
+  .duct { fill: #1e293b; stroke: #334155; stroke-width: 2; }
+  .click { cursor: pointer; }
+  .alarm-blink { animation: alarmfill 1s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: .25; } }
+  @keyframes alarmfill { 50% { opacity: .15; } }
+</style>
+</head>
+<body>
+<header>
+  <h1 data-t="title"></h1>
+  <span class="sub">NanoMotion · 26000017-HVAC-W · rev 02</span>
+  <span class="spacer"></span>
+  <span class="lang"><button data-l="ru">RU</button><button data-l="en">EN</button><button data-l="he">עב</button></span>
+  <span class="bell" id="bell" title="">&#128276;<span class="cnt" id="bellCnt">0</span></span>
+</header>
+
+<div class="wrap">
+<div class="scene">
+<svg id="svg" viewBox="0 0 1400 800" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="gMetal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e2e8f0"/><stop offset="1" stop-color="#94a3b8"/>
+    </linearGradient>
+    <linearGradient id="gTop" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#f1f5f9"/><stop offset="1" stop-color="#cbd5e1"/>
+    </linearGradient>
+    <linearGradient id="gSide" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#64748b"/><stop offset="1" stop-color="#475569"/>
+    </linearGradient>
+    <pattern id="pFilter" width="8" height="8" patternUnits="userSpaceOnUse">
+      <path d="M0 8 L8 0 M-2 2 L2 -2 M6 10 L10 6" stroke="#94a3b8" stroke-width="1.2"/>
+    </pattern>
+    <marker id="arr" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#e879f9"/>
+    </marker>
+  </defs>
+
+  <!-- ===== Крыша / этажи ===== -->
+  <rect x="0" y="420" width="1400" height="14" fill="#1e293b"/>
+  <text x="20" y="414" class="lbl-s" data-t="roof"></text>
+
+  <!-- ===== VRF наружный блок ===== -->
+  <g id="vrf" class="click" data-card="vrf">
+    <rect x="300" y="20" width="90" height="100" rx="4" fill="url(#gMetal)" stroke="#475569"/>
+    <circle cx="345" cy="50" r="24" fill="#0b1222" stroke="#475569"/>
+    <g id="vrfFan" transform="translate(345 50)">
+      <path d="M0 -22 Q8 -8 0 0 Q-8 -8 0 -22 M22 0 Q8 8 0 0 Q8 -8 22 0 M0 22 Q-8 8 0 0 Q8 8 0 22 M-22 0 Q-8 -8 0 0 Q-8 8 -22 0" fill="#94a3b8"/>
+    </g>
+    <text x="345" y="100" class="tag-t" style="fill:#c2410c;font-size:14px">VRF</text>
+    <rect id="vrfState" x="306" y="26" width="10" height="10" rx="5" fill="#475569"/>
+  </g>
+  <path d="M330 120 V170 M360 120 V170" stroke="#fb923c" stroke-width="3" fill="none"/>
+
+  <!-- ===== Установка (package 600 cfm) ===== -->
+  <!-- верх и бок корпуса для объёма -->
+  <polygon points="120,170 150,145 1010,145 980,170" fill="url(#gTop)" stroke="#94a3b8"/>
+  <polygon points="980,170 1010,145 1010,315 980,340" fill="url(#gSide)"/>
+  <rect x="120" y="170" width="860" height="170" fill="#e2e8f0" stroke="#94a3b8"/>
+  <!-- перегородки секций -->
+  <g stroke="#94a3b8" stroke-width="1.5">
+    <line x1="285" y1="170" x2="285" y2="340"/><line x1="390" y1="170" x2="390" y2="340"/>
+    <line x1="515" y1="170" x2="515" y2="340"/><line x1="780" y1="170" x2="780" y2="340"/>
+  </g>
+  <!-- окна секций (внутренность) -->
+  <rect x="130" y="185" width="145" height="140" fill="#cbd5e1" opacity=".55"/>
+  <rect x="295" y="185" width="85" height="140" fill="#cbd5e1" opacity=".55"/>
+  <rect x="400" y="185" width="105" height="140" fill="#cbd5e1" opacity=".55"/>
+  <rect x="525" y="185" width="245" height="140" fill="#cbd5e1" opacity=".55"/>
+  <rect x="790" y="185" width="180" height="140" fill="#cbd5e1" opacity=".55"/>
+
+  <!-- поток воздуха внутри установки -->
+  <path id="flowFresh" class="flow flow-fresh" d="M10 262 H130"/>
+  <path id="flowAhu" class="flow flow-supply" d="M140 262 H970" opacity=".35"/>
+
+  <!-- Фильтр 12% -->
+  <g id="f1" class="click" data-card="f1">
+    <rect x="150" y="195" width="40" height="120" fill="url(#pFilter)" stroke="#64748b"/>
+    <rect id="f1dirt" x="150" y="315" width="40" height="0" fill="#78350f" opacity=".45"/>
+    <text x="170" y="332" class="lbl-s" text-anchor="middle" style="fill:#334155">12%</text>
+  </g>
+  <!-- Фильтр 30% -->
+  <g id="f2" class="click" data-card="f2">
+    <rect x="215" y="195" width="40" height="120" fill="url(#pFilter)" stroke="#64748b"/>
+    <rect id="f2dirt" x="215" y="315" width="40" height="0" fill="#78350f" opacity=".45"/>
+    <text x="235" y="332" class="lbl-s" text-anchor="middle" style="fill:#334155">30%</text>
+  </g>
+  <!-- PI на фильтрах 12/30 -->
+  <g class="click" data-card="pi1">
+    <path d="M160 170 V110 H245 V170" stroke="#22d3ee" fill="none"/>
+    <circle cx="202" cy="100" r="17" class="tag"/>
+    <line id="pi1n" x1="202" y1="100" x2="202" y2="87" stroke="#22d3ee" stroke-width="2"/>
+    <text x="202" y="112" class="tag-t">PI</text>
+    <text id="pi1v" x="228" y="90" class="val" style="font-size:11px"></text>
+  </g>
+
+  <!-- Теплообменник VRF -->
+  <g id="coil" class="click" data-card="coil">
+    <rect id="coilBody" x="310" y="195" width="55" height="120" fill="#94a3b8" stroke="#475569"/>
+    <g stroke="#475569" stroke-width="1">
+      <line x1="310" y1="210" x2="365" y2="210"/><line x1="310" y1="225" x2="365" y2="225"/>
+      <line x1="310" y1="240" x2="365" y2="240"/><line x1="310" y1="255" x2="365" y2="255"/>
+      <line x1="310" y1="270" x2="365" y2="270"/><line x1="310" y1="285" x2="365" y2="285"/>
+      <line x1="310" y1="300" x2="365" y2="300"/>
+    </g>
+    <text x="337" y="332" class="lbl-s" text-anchor="middle" style="fill:#334155">DX</text>
+  </g>
+
+  <!-- Электронагреватель 3 × 1.2 кВт -->
+  <g id="heater" class="click" data-card="heater">
+    <path id="h1" d="M410 205 q6 -8 12 0 t12 0 t12 0 t12 0 t12 0 t12 0 t12 0 t12 0" stroke="#64748b" stroke-width="5" fill="none"/>
+    <path id="h2" d="M410 255 q6 -8 12 0 t12 0 t12 0 t12 0 t12 0 t12 0 t12 0 t12 0" stroke="#64748b" stroke-width="5" fill="none"/>
+    <path id="h3" d="M410 305 q6 -8 12 0 t12 0 t12 0 t12 0 t12 0 t12 0 t12 0 t12 0" stroke="#64748b" stroke-width="5" fill="none"/>
+    <text x="452" y="332" class="lbl-s" text-anchor="middle" style="fill:#334155">3×1.2 kW</text>
+  </g>
+  <!-- TS перегрев -->
+  <g class="click" data-card="ts">
+    <circle id="tsTag" cx="452" cy="365" r="15" class="tag"/>
+    <text x="452" y="369" class="tag-t">TS</text>
+    <line x1="452" y1="350" x2="452" y2="320" stroke="#22d3ee"/>
+  </g>
+
+  <!-- Вентилятор + двигатель + частотник -->
+  <g id="fan" class="click" data-card="fan">
+    <circle cx="620" cy="255" r="62" fill="#e2e8f0" stroke="#475569" stroke-width="3"/>
+    <circle cx="620" cy="255" r="48" fill="#0b1222"/>
+    <g id="fanBlades" transform="translate(620 255)">
+      <path d="M0 -44 Q16 -18 0 0 Q-10 -20 0 -44" fill="#94a3b8"/>
+      <path d="M0 -44 Q16 -18 0 0 Q-10 -20 0 -44" fill="#94a3b8" transform="rotate(60)"/>
+      <path d="M0 -44 Q16 -18 0 0 Q-10 -20 0 -44" fill="#94a3b8" transform="rotate(120)"/>
+      <path d="M0 -44 Q16 -18 0 0 Q-10 -20 0 -44" fill="#94a3b8" transform="rotate(180)"/>
+      <path d="M0 -44 Q16 -18 0 0 Q-10 -20 0 -44" fill="#94a3b8" transform="rotate(240)"/>
+      <path d="M0 -44 Q16 -18 0 0 Q-10 -20 0 -44" fill="#94a3b8" transform="rotate(300)"/>
+      <circle r="8" fill="#475569"/>
+    </g>
+    <rect x="690" y="238" width="60" height="34" rx="6" fill="#475569"/>
+    <g stroke="#334155" stroke-width="2"><line x1="700" y1="238" x2="700" y2="272"/><line x1="712" y1="238" x2="712" y2="272"/><line x1="724" y1="238" x2="724" y2="272"/><line x1="736" y1="238" x2="736" y2="272"/></g>
+  </g>
+  <g id="vsd" class="click" data-card="vsd">
+    <rect id="vsdBody" x="690" y="360" width="70" height="46" rx="4" fill="#1e293b" stroke="#22d3ee"/>
+    <text x="725" y="378" class="tag-t">VSD</text>
+    <text id="vsdV" x="725" y="397" class="val" text-anchor="middle" style="font-size:12px"></text>
+    <line x1="725" y1="360" x2="725" y2="272" stroke="#ef4444" stroke-dasharray="4 3"/>
+  </g>
+  <!-- FS реле потока -->
+  <g class="click" data-card="fs">
+    <circle id="fsTag" cx="770" cy="365" r="15" class="tag"/>
+    <text x="770" y="369" class="tag-t">FS</text>
+    <path d="M770 350 V305 l12 5 -12 5" stroke="#22d3ee" fill="none"/>
+  </g>
+
+  <!-- Фильтр 95% (HEPA/финальный) -->
+  <g id="f3" class="click" data-card="f3">
+    <rect x="850" y="195" width="55" height="120" fill="url(#pFilter)" stroke="#64748b"/>
+    <rect id="f3dirt" x="850" y="315" width="55" height="0" fill="#78350f" opacity=".45"/>
+    <text x="877" y="332" class="lbl-s" text-anchor="middle" style="fill:#334155">95%</text>
+  </g>
+  <g class="click" data-card="pi2">
+    <path d="M830 170 V110 H925 V170" stroke="#22d3ee" fill="none"/>
+    <circle cx="877" cy="100" r="17" class="tag"/>
+    <line id="pi2n" x1="877" y1="100" x2="877" y2="87" stroke="#22d3ee" stroke-width="2"/>
+    <text x="877" y="112" class="tag-t">PI</text>
+    <text id="pi2v" x="903" y="90" class="val" style="font-size:11px"></text>
+  </g>
+
+  <text x="550" y="162" class="lbl-s" text-anchor="middle" style="fill:#475569" data-t="package"></text>
+
+  <!-- Наружный воздух -->
+  <text x="10" y="240" class="lbl" style="fill:#fb923c;font-size:11px" data-t="fresh"></text>
+  <text id="freshV" x="14" y="290" class="val"></text>
+
+  <!-- ===== Приточный воздуховод ===== -->
+  <rect x="980" y="240" width="210" height="44" class="duct"/>
+  <rect x="1150" y="240" width="44" height="235" class="duct"/>
+  <rect x="380" y="455" width="814" height="30" class="duct"/>
+  <path id="flowSupply" class="flow flow-supply" d="M985 262 H1172 V470 H400"/>
+  <!-- DPT / TT в воздуховоде -->
+  <g class="click" data-card="dpt">
+    <line x1="1040" y1="240" x2="1040" y2="205" stroke="#22d3ee"/>
+    <circle id="dptTag" cx="1040" cy="190" r="17" class="tag"/>
+    <text x="1040" y="194" class="tag-t">DPT</text>
+    <text id="dptV" x="1040" y="160" class="val" text-anchor="middle"></text>
+  </g>
+  <g class="click" data-card="tt1">
+    <line x1="1110" y1="240" x2="1110" y2="205" stroke="#22d3ee"/>
+    <circle id="tt1Tag" cx="1110" cy="190" r="17" class="tag"/>
+    <text x="1110" y="194" class="tag-t">TT</text>
+    <text id="tt1V" x="1110" y="160" class="val" text-anchor="middle"></text>
+  </g>
+  <text id="cfmV" x="1080" y="305" class="val" text-anchor="middle"></text>
+
+  <!-- ===== Комната ===== -->
+  <g id="room" class="click" data-card="room">
+    <rect id="roomBody" x="380" y="490" width="770" height="270" fill="#0b1f17" stroke="#4ade80" stroke-width="2"/>
+    <text x="765" y="610" class="lbl" text-anchor="middle" style="fill:#4ade80;font-size:16px" data-t="room"></text>
+    <text x="765" y="632" class="lbl-s" text-anchor="middle">A 35 m² · h 2.7 m · V 95 m³ · ISO 7 · ACH 50</text>
+    <text id="roomT" x="765" y="680" class="val" text-anchor="middle" style="font-size:28px"></text>
+    <text id="roomSp" x="765" y="704" class="lbl-s" text-anchor="middle"></text>
+  </g>
+  <g id="ffus"></g>
+  <g id="roomFlows"></g>
+  <!-- TT в комнате -->
+  <g class="click" data-card="tt2">
+    <circle id="tt2Tag" cx="1100" cy="560" r="17" class="tag"/>
+    <text x="1100" y="564" class="tag-t">TT</text>
+  </g>
+  <!-- клапан сброса давления -->
+  <g class="click" data-card="relief">
+    <rect x="1140" y="700" width="20" height="50" fill="#1e293b" stroke="#94a3b8"/>
+    <g id="reliefBlades" stroke="#cbd5e1" stroke-width="2">
+      <line x1="1142" y1="712" x2="1158" y2="712"/><line x1="1142" y1="725" x2="1158" y2="725"/><line x1="1142" y1="738" x2="1158" y2="738"/>
+    </g>
+    <path id="flowRelief" class="flow flow-room" d="M1165 725 H1230"/>
+  </g>
+  <!-- существующий кондиционер (инвертор) -->
+  <g class="click" data-card="ac">
+    <rect x="1220" y="500" width="110" height="60" rx="4" fill="#2a2a1a" stroke="#a3a36b"/>
+    <circle cx="1250" cy="530" r="18" fill="#0b1222" stroke="#a3a36b"/>
+    <g id="acFan" transform="translate(1250 530)"><path d="M0 -15 Q6 -5 0 0 Q-6 -5 0 -15 M15 0 Q5 6 0 0 Q5 -6 15 0 M0 15 Q-6 5 0 0 Q6 5 0 15 M-15 0 Q-5 -6 0 0 Q-5 6 -15 0" fill="#a3a36b"/></g>
+    <text x="1300" y="526" class="lbl-s" text-anchor="middle">AC</text>
+    <text x="1300" y="542" class="lbl-s" text-anchor="middle">INV</text>
+    <path id="flowAc" class="flow flow-ac" d="M1220 520 H1160"/>
+  </g>
+  <text x="1275" y="580" class="lbl-s" text-anchor="middle" data-t="acExisting"></text>
+</svg>
+</div>
+
+<aside>
+  <h3 data-t="sim"></h3>
+  <div class="chk"><input type="checkbox" id="run" checked><label for="run" data-t="run" style="margin:0"></label></div>
+  <label><span data-t="fanSp"></span><span id="fanSpV"></span></label>
+  <input type="range" id="fanSp" min="0" max="100" value="80">
+  <label><span data-t="stages"></span><span id="stagesV"></span></label>
+  <input type="range" id="stages" min="0" max="3" value="1">
+  <label><span data-t="vrfMode"></span></label>
+  <select id="vrfMode"><option value="off"></option><option value="cool"></option><option value="heat"></option></select>
+  <label><span data-t="vrfCap"></span><span id="vrfCapV"></span></label>
+  <input type="range" id="vrfCap" min="0" max="100" value="50">
+  <label><span data-t="outT"></span><span id="outTV"></span></label>
+  <input type="range" id="outT" min="-5" max="40" value="12">
+  <label><span data-t="dirt"></span><span id="dirtV"></span></label>
+  <input type="range" id="dirt" min="0" max="100" value="35">
+  <label><span data-t="sp"></span><span id="spV"></span></label>
+  <input type="range" id="sp" min="18" max="26" step="0.5" value="21">
+
+  <h3 data-t="faults"></h3>
+  <div class="chk"><input type="checkbox" id="fVsd"><label for="fVsd" data-t="fVsd" style="margin:0"></label></div>
+  <div class="chk"><input type="checkbox" id="fBelt"><label for="fBelt" data-t="fBelt" style="margin:0"></label></div>
+  <div class="chk"><input type="checkbox" id="fTt"><label for="fTt" data-t="fTt" style="margin:0"></label></div>
+  <div class="chk"><input type="checkbox" id="fVrf"><label for="fVrf" data-t="fVrf" style="margin:0"></label></div>
+
+  <div class="note" data-t="note"></div>
+</aside>
+</div>
+
+<div id="alarms"><b data-t="activeAlarms"></b><ul id="alarmList"></ul></div>
+<div id="card"></div>
+
+<script>
+const T = {
+  ru: {
+    title: "Чистая комната — приточная установка", roof: "Крыша", package: "Приточная установка (package) 600 cfm",
+    fresh: "Наружный воздух", room: "Комната расширения", acExisting: "Существующий кондиционер",
+    sim: "Симулятор значений", run: "Установка в работе", fanSp: "Частотник, %", stages: "Ступени нагрева",
+    vrfMode: "Режим VRF", vrfCap: "Мощность VRF, %", outT: "Наружная T, °C", dirt: "Загрязнение фильтров, %",
+    sp: "Уставка T комнаты, °C", faults: "Имитация неисправностей", fVsd: "Авария частотника", fBelt: "Нет потока (FS)",
+    fTt: "Обрыв датчика TT комнаты", fVrf: "Авария VRF", activeAlarms: "Активные аварии",
+    off: "Выкл", cool: "Охлаждение", heat: "Нагрев", sp_: "уставка",
+    note: "Демо по P&ID NanoMotion 26000017-HVAC-W. Схема собрана из секций, каждая часть привязана к значению. Щелчок по элементу — карточка, колокольчик — активные аварии.",
+    a_flow: "Нет потока воздуха (FS) при работе вентилятора", a_ts: "Перегрев нагревателя (TS) — ступени отключены",
+    a_vsd: "Авария частотника вентилятора", a_filt: "Фильтры загрязнены — требуется замена", a_tt: "Датчик TT комнаты: обрыв",
+    a_vrf: "Авария VRF", a_roomT: "Температура комнаты вне допуска ±2 °C", noAlarms: "Нет активных аварий",
+    c: { vrf: "VRF — наружный блок", coil: "Теплообменник DX (VRF)", heater: "Электронагреватель 3×1.2 кВт", fan: "Приточный вентилятор",
+         vsd: "Частотник (AO)", fs: "Реле потока FS (DI)", ts: "Термостат перегрева TS (DI)", f1: "Фильтр 12%", f2: "Фильтр 30%",
+         f3: "Фильтр 95%", pi1: "PI — перепад на фильтрах 12/30%", pi2: "PI — перепад на фильтре 95%", dpt: "DPT — давление в приточном воздуховоде (AI)",
+         tt1: "TT — температура приточного воздуха (AI)", tt2: "TT — температура комнаты (AI)", room: "Комната расширения, ISO 7",
+         relief: "Клапан сброса давления", ac: "Существующий кондиционер (инвертор)" },
+    state: "Состояние", on: "Работа", stop: "Стоп", alarm: "Авария", value: "Значение", ch: "Канал"
+  },
+  en: {
+    title: "Clean room — supply air unit", roof: "Roof", package: "Package unit 600 cfm",
+    fresh: "Fresh air", room: "Extension room", acExisting: "Existing AC unit",
+    sim: "Value simulator", run: "Unit running", fanSp: "VSD, %", stages: "Heater stages",
+    vrfMode: "VRF mode", vrfCap: "VRF capacity, %", outT: "Outdoor T, °C", dirt: "Filter loading, %",
+    sp: "Room T setpoint, °C", faults: "Fault simulation", fVsd: "VSD fault", fBelt: "No airflow (FS)",
+    fTt: "Room TT sensor broken", fVrf: "VRF fault", activeAlarms: "Active alarms",
+    off: "Off", cool: "Cooling", heat: "Heating", sp_: "setpoint",
+    note: "Demo based on NanoMotion P&ID 26000017-HVAC-W. The scheme is assembled from sections, every part is bound to a value. Click an element for its card, the bell for active alarms.",
+    a_flow: "No airflow (FS) while fan is running", a_ts: "Heater overheat (TS) — stages tripped",
+    a_vsd: "Supply fan VSD fault", a_filt: "Filters loaded — replacement required", a_tt: "Room TT sensor: open circuit",
+    a_vrf: "VRF fault", a_roomT: "Room temperature out of ±2 °C band", noAlarms: "No active alarms",
+    c: { vrf: "VRF outdoor unit", coil: "DX coil (VRF)", heater: "Electric heater 3×1.2 kW", fan: "Supply fan",
+         vsd: "Variable speed drive (AO)", fs: "Flow switch FS (DI)", ts: "Overheat thermostat TS (DI)", f1: "Filter 12%", f2: "Filter 30%",
+         f3: "Filter 95%", pi1: "PI — dP across 12/30% filters", pi2: "PI — dP across 95% filter", dpt: "DPT — supply duct pressure (AI)",
+         tt1: "TT — supply air temperature (AI)", tt2: "TT — room temperature (AI)", room: "Extension room, ISO 7",
+         relief: "Pressure relief damper", ac: "Existing AC unit (inverter)" },
+    state: "State", on: "Running", stop: "Stopped", alarm: "Alarm", value: "Value", ch: "Channel"
+  },
+  he: {
+    title: "חדר נקי — יחידת אוויר צח", roof: "גג", package: "יחידת פקג' 600 cfm",
+    fresh: "אוויר צח", room: "חדר הרחבה", acExisting: "מזגן קיים",
+    sim: "סימולטור ערכים", run: "היחידה בפעולה", fanSp: "ממיר תדר, %", stages: "דרגות חימום",
+    vrfMode: "מצב VRF", vrfCap: "הספק VRF, %", outT: "טמפ' חוץ, °C", dirt: "סתימת מסננים, %",
+    sp: "נקודת קביעה טמפ' חדר, °C", faults: "הדמיית תקלות", fVsd: "תקלת ממיר תדר", fBelt: "אין זרימה (FS)",
+    fTt: "חיישן TT חדר מנותק", fVrf: "תקלת VRF", activeAlarms: "התראות פעילות",
+    off: "כבוי", cool: "קירור", heat: "חימום", sp_: "נקודת קביעה",
+    note: "הדגמה לפי P&ID של NanoMotion 26000017-HVAC-W. הסכמה בנויה ממקטעים, כל חלק מקושר לערך. לחיצה על רכיב — כרטיס, פעמון — התראות פעילות.",
+    a_flow: "אין זרימת אוויר (FS) כשהמפוח פועל", a_ts: "התחממות יתר של המחמם (TS) — הדרגות נותקו",
+    a_vsd: "תקלת ממיר תדר מפוח", a_filt: "מסננים סתומים — נדרשת החלפה", a_tt: "חיישן TT חדר: נתק",
+    a_vrf: "תקלת VRF", a_roomT: "טמפ' החדר מחוץ לתחום ±2 °C", noAlarms: "אין התראות פעילות",
+    c: { vrf: "VRF — יחידה חיצונית", coil: "סליל DX (VRF)", heater: "מחמם חשמלי 3×1.2 קו\"ט", fan: "מפוח אספקה",
+         vsd: "ממיר תדר (AO)", fs: "מפסק זרימה FS (DI)", ts: "תרמוסטט התחממות TS (DI)", f1: "מסנן 12%", f2: "מסנן 30%",
+         f3: "מסנן 95%", pi1: "PI — הפרש לחצים מסננים 12/30%", pi2: "PI — הפרש לחצים מסנן 95%", dpt: "DPT — לחץ בתעלת אספקה (AI)",
+         tt1: "TT — טמפ' אוויר אספקה (AI)", tt2: "TT — טמפ' חדר (AI)", room: "חדר הרחבה, ISO 7",
+         relief: "מדף שחרור לחץ", ac: "מזגן קיים (אינוורטר)" },
+    state: "מצב", on: "פועל", stop: "עצור", alarm: "תקלה", value: "ערך", ch: "ערוץ"
+  }
+};
+let lang = "ru";
+const $ = id => document.getElementById(id);
+
+function applyLang() {
+  const t = T[lang];
+  document.documentElement.lang = lang;
+  document.documentElement.dir = lang === "he" ? "rtl" : "ltr";
+  document.querySelectorAll("[data-t]").forEach(e => { const k = e.dataset.t; if (t[k]) e.textContent = t[k]; });
+  document.querySelectorAll(".lang button").forEach(b => b.classList.toggle("on", b.dataset.l === lang));
+  const opts = $("vrfMode").options; opts[0].text = t.off; opts[1].text = t.cool; opts[2].text = t.heat;
+  $("bell").title = t.activeAlarms;
+}
+document.querySelectorAll(".lang button").forEach(b => b.onclick = () => { lang = b.dataset.l; applyLang(); render(); });
+
+/* FFU — 6 шт. по 440 cfm */
+const ffuG = $("ffus"), rfG = $("roomFlows"), ffuFans = [];
+for (let i = 0; i < 6; i++) {
+  const x = 440 + i * 110, ns = "http://www.w3.org/2000/svg";
+  const g = document.createElementNS(ns, "g");
+  g.setAttribute("class", "click"); g.dataset.card = "ffu" + i;
+  g.innerHTML = `<rect x="${x - 40}" y="488" width="80" height="20" fill="#14532d" stroke="#4ade80"/>
+    <circle cx="${x}" cy="498" r="8" fill="#0b1222" stroke="#4ade80"/>
+    <g transform="translate(${x} 498)"><path d="M0 -7 L2 0 L0 7 L-2 0 z M-7 0 L0 2 L7 0 L0 -2 z" fill="#4ade80"/></g>
+    <text x="${x}" y="524" text-anchor="middle" class="lbl-s" style="fill:#60a5fa">440 cfm</text>`;
+  ffuG.appendChild(g); ffuFans.push(g.querySelector("g"));
+  const p = document.createElementNS(ns, "path");
+  p.setAttribute("class", "flow flow-room"); p.setAttribute("d", `M${x} 530 V585`);
+  rfG.appendChild(p);
+}
+
+/* состояние процесса */
+const S = { roomT: 20.5, supplyT: 18, fanRpmPhase: 0, flowPhase: 0, tsTrip: false };
+function ctl() {
+  return {
+    run: $("run").checked, fan: +$("fanSp").value, stages: +$("stages").value, vrfMode: $("vrfMode").value,
+    vrfCap: +$("vrfCap").value, outT: +$("outT").value, dirt: +$("dirt").value, sp: +$("sp").value,
+    fVsd: $("fVsd").checked, fBelt: $("fBelt").checked, fTt: $("fTt").checked, fVrf: $("fVrf").checked
+  };
+}
+let alarms = [];
+
+function step() {
+  const c = ctl();
+  const fanOn = c.run && !c.fVsd && c.fan > 0;
+  const flowPct = fanOn && !c.fBelt ? c.fan * (1 - c.dirt / 250) : 0;
+  const flowOk = flowPct > 15;
+  if (!c.run) S.tsTrip = false;
+  const stagesOn = c.run && flowOk && !S.tsTrip ? c.stages : 0;
+  if (c.run && c.stages > 0 && fanOn && !flowOk && c.fBelt) S.tsTrip = true;
+  const vrfOn = c.run && c.vrfMode !== "off" && !c.fVrf && flowOk;
+  const vrfDelta = vrfOn ? (c.vrfMode === "cool" ? -12 : 12) * c.vrfCap / 100 : 0;
+  const k = flowOk ? 600 / Math.max(150, 600 * flowPct / 100) : 0;
+  const targetSupply = flowOk ? c.outT + vrfDelta + stagesOn * 3.2 * Math.min(k, 3) : S.roomT;
+  S.supplyT += (targetSupply - S.supplyT) * 0.15;
+  const roomTarget = flowOk ? 0.55 * S.supplyT + 0.45 * 22 : 22 + (c.outT - 22) * 0.1;
+  S.roomT += (roomTarget - S.roomT) * 0.03;
+  const cfm = Math.round(600 * flowPct / 100);
+  const dpFilt1 = Math.round((40 + c.dirt * 2.2) * (flowPct / 100) ** 2);
+  const dpFilt2 = Math.round((120 + c.dirt * 3.5) * (flowPct / 100) ** 2);
+  const ductP = Math.round(250 * (flowPct / 100) ** 2);
+
+  alarms = [];
+  if (c.fVsd && c.run) alarms.push({ k: "a_vsd", el: "vsd" });
+  if (fanOn && !flowOk) alarms.push({ k: "a_flow", el: "fs" });
+  if (S.tsTrip) alarms.push({ k: "a_ts", el: "ts" });
+  if (c.dirt >= 80) alarms.push({ k: "a_filt", el: "filters" });
+  if (c.fTt) alarms.push({ k: "a_tt", el: "tt2" });
+  if (c.fVrf && c.run && c.vrfMode !== "off") alarms.push({ k: "a_vrf", el: "vrf" });
+  if (!c.fTt && c.run && Math.abs(S.roomT - c.sp) > 2) alarms.push({ k: "a_roomT", el: "room" });
+
+  Object.assign(S, { c, fanOn, flowPct, flowOk, stagesOn, vrfOn, cfm, dpFilt1, dpFilt2, ductP });
+  render();
+}
+
+function heatColor(on) { return on ? "#ef4444" : "#64748b"; }
+function setBlink(id, on) { const e = $(id); if (e) e.classList.toggle("alarm-blink", on); }
+
+function render() {
+  if (!S.c) return;
+  const t = T[lang], c = S.c;
+  $("fanSpV").textContent = c.fan + "%"; $("stagesV").textContent = c.stages;
+  $("vrfCapV").textContent = c.vrfCap + "%"; $("outTV").textContent = c.outT + "°"; $("dirtV").textContent = c.dirt + "%"; $("spV").textContent = c.sp + "°";
+
+  ["h1", "h2", "h3"].forEach((h, i) => $(h).setAttribute("stroke", heatColor(i < S.stagesOn)));
+  const coil = S.vrfOn ? (c.vrfMode === "cool" ? `rgba(59,130,246,${0.35 + c.vrfCap / 160})` : `rgba(239,68,68,${0.35 + c.vrfCap / 160})`) : "#94a3b8";
+  $("coilBody").setAttribute("fill", coil);
+  $("vrfState").setAttribute("fill", c.fVrf && c.vrfMode !== "off" && c.run ? "#ef4444" : S.vrfOn ? "#22c55e" : "#475569");
+  ["f1dirt", "f2dirt", "f3dirt"].forEach((f, i) => { const h = 120 * c.dirt / 100 * (i === 2 ? 0.7 : 1); $(f).setAttribute("y", 315 - h); $(f).setAttribute("height", h); });
+  $("pi1n").setAttribute("transform", `rotate(${-90 + Math.min(180, S.dpFilt1 / 1.6)} 202 100)`);
+  $("pi2n").setAttribute("transform", `rotate(${-90 + Math.min(180, S.dpFilt2 / 2.4)} 877 100)`);
+  $("pi1v").textContent = S.dpFilt1 + " Pa"; $("pi2v").textContent = S.dpFilt2 + " Pa";
+  $("vsdV").textContent = c.fVsd ? "FAULT" : (S.fanOn ? (c.fan * 0.5).toFixed(1) + " Hz" : "0 Hz");
+  $("vsdBody").setAttribute("stroke", c.fVsd && c.run ? "#ef4444" : "#22d3ee");
+  $("dptV").textContent = S.ductP + " Pa"; $("tt1V").textContent = S.supplyT.toFixed(1) + " °C";
+  $("cfmV").textContent = S.cfm + " cfm";
+  $("freshV").textContent = c.outT + " °C";
+  $("roomT").textContent = c.fTt ? "— — °C" : S.roomT.toFixed(1) + " °C";
+  $("roomSp").textContent = `${t.sp_} ${c.sp} °C`;
+
+  const fOp = S.flowOk ? 1 : 0.12;
+  ["flowFresh", "flowSupply", "flowRelief"].forEach(id => $(id).style.opacity = fOp);
+  $("flowAhu").style.opacity = S.flowOk ? 0.45 : 0.08;
+  rfG.querySelectorAll("path").forEach(p => p.style.opacity = c.run ? 1 : 0.12);
+  $("reliefBlades").setAttribute("transform", S.flowOk ? "rotate(-25 1150 725)" : "");
+
+  const act = new Set(alarms.map(a => a.el));
+  setBlink("vsdBody", act.has("vsd")); setBlink("fsTag", act.has("fs")); setBlink("tsTag", act.has("ts"));
+  setBlink("tt2Tag", act.has("tt2")); setBlink("roomBody", act.has("room")); setBlink("vrfState", act.has("vrf"));
+  ["f1", "f2", "f3"].forEach(f => setBlink(f, act.has("filters")));
+  $("bellCnt").textContent = alarms.length; $("bell").classList.toggle("active", alarms.length > 0);
+  $("alarmList").innerHTML = alarms.length ? alarms.map(a => `<li style="color:#fca5a5">● ${t[a.k]}</li>`).join("") : `<li>${t.noAlarms}</li>`;
+}
+
+/* анимация: вентиляторы и поток */
+let last = performance.now(), fanA = 0, vrfA = 0, ffuA = 0, acA = 0, dash = 0;
+function anim(now) {
+  const dt = (now - last) / 1000; last = now;
+  if (S.c) {
+    fanA += dt * (S.fanOn ? S.c.fan * 7 : 0);
+    vrfA += dt * (S.vrfOn ? 200 : 0);
+    ffuA += dt * (S.c.run ? 500 : 0);
+    acA += dt * 250;
+    dash -= dt * (S.flowOk ? 20 + S.flowPct * 0.8 : 0);
+    $("fanBlades").setAttribute("transform", `translate(620 255) rotate(${fanA})`);
+    $("vrfFan").setAttribute("transform", `translate(345 50) rotate(${vrfA})`);
+    $("acFan").setAttribute("transform", `translate(1250 530) rotate(${acA})`);
+    ffuFans.forEach((f, i) => f.setAttribute("transform", `translate(${440 + i * 110} 498) rotate(${ffuA})`));
+    document.querySelectorAll(".flow").forEach(p => p.style.strokeDashoffset = dash);
+    rfG.querySelectorAll("path").forEach(p => p.style.strokeDashoffset = S.c.run ? dash * 0.8 - now / 40 : 0);
+    $("flowAc").style.strokeDashoffset = -now / 30;
+  }
+  requestAnimationFrame(anim);
+}
+
+/* карточки элементов */
+const chan = { vrf: "DO1 / DI5", coil: "—", heater: "RL1..RL3", fan: "DO2", vsd: "AO1 / DI3", fs: "DI1", ts: "DI2",
+  f1: "—", f2: "—", f3: "—", pi1: "local", pi2: "local", dpt: "AI2", tt1: "AI1", tt2: "AI3", room: "—", relief: "—", ac: "—" };
+function cardText(key) {
+  const t = T[lang], c = S.c;
+  if (key.startsWith("ffu")) return { h: `FFU ${+key.slice(3) + 1}`, rows: [[t.state, c.run ? t.on : t.stop], [t.value, "440 cfm"]] };
+  const val = {
+    vrf: c.vrfMode === "off" ? t.off : t[c.vrfMode] + " " + c.vrfCap + "%", heater: S.stagesOn + " / 3",
+    fan: S.fanOn ? c.fan + "%" : t.stop, vsd: c.fVsd ? t.alarm : (S.fanOn ? (c.fan * 0.5).toFixed(1) + " Hz" : "0 Hz"),
+    fs: S.flowOk ? "OK" : "—", ts: S.tsTrip ? t.alarm : "OK", f1: S.dpFilt1 + " Pa", f2: S.dpFilt1 + " Pa", f3: S.dpFilt2 + " Pa",
+    pi1: S.dpFilt1 + " Pa", pi2: S.dpFilt2 + " Pa", dpt: S.ductP + " Pa", tt1: S.supplyT.toFixed(1) + " °C",
+    tt2: c.fTt ? t.alarm : S.roomT.toFixed(1) + " °C", room: S.roomT.toFixed(1) + " °C · " + S.cfm + " cfm",
+    coil: S.vrfOn ? t[c.vrfMode] : t.off, relief: S.flowOk ? "open" : "closed", ac: t.on
+  }[key];
+  return { h: t.c[key], rows: [[t.value, val], [t.ch, chan[key]]] };
+}
+document.addEventListener("click", e => {
+  const card = $("card");
+  if (e.target.closest("#bell")) { const a = $("alarms"); a.style.display = a.style.display === "block" ? "none" : "block"; card.style.display = "none"; return; }
+  const g = e.target.closest("[data-card]");
+  if (!g) { card.style.display = "none"; return; }
+  const d = cardText(g.dataset.card);
+  card.innerHTML = `<b>${d.h}</b>` + d.rows.map(r => `<div>${r[0]}: <span style="color:#fff">${r[1]}</span></div>`).join("");
+  card.style.left = Math.min(e.clientX + 12, innerWidth - 260) + "px"; card.style.top = (e.clientY + 12) + "px"; card.style.display = "block";
+});
+
+applyLang();
+step();
+setInterval(step, 500);
+requestAnimationFrame(anim);
+</script>
+</body>
+</html>

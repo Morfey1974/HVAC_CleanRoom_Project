@@ -25,7 +25,7 @@
 #include "main.h"
 
 /*-----------------------------------------------------------------------------*/
-/* Current version of LwIP supported by CubeMx: 2.1.2 -*/
+/* Current version of LwIP supported by CubeMx: 2.2.1 -*/
 /*-----------------------------------------------------------------------------*/
 
 /* Within 'USER CODE' section, code will be kept by default at each generation */
@@ -113,6 +113,27 @@
 #define CHECKSUM_CHECK_ICMP6 0
 /*-----------------------------------------------------------------------------*/
 /* USER CODE BEGIN 1 */
+
+/* RAM_D2 is 32 KB: ETH descriptors + 12 RX buffers occupy ~0x30000000..0x30004B00
+ * (see .eth_dma in the linker script), so the heap goes above them. */
+#undef LWIP_RAM_HEAP_POINTER
+#define LWIP_RAM_HEAP_POINTER           0x30005000
+#define MEM_SIZE                        8192
+
+#define TCP_MSS                         1460
+#undef TCP_SND_BUF
+#define TCP_SND_BUF                     5840
+#undef TCP_SND_QUEUELEN
+#define TCP_SND_QUEUELEN                17
+#undef TCP_SNDLOWAT
+#define TCP_SNDLOWAT                    2920
+#define MEMP_NUM_TCP_PCB                16
+#define MEMP_NUM_TCP_SEG                32
+#define MEMP_NUM_NETCONN                8
+#define TCP_MSL                         2000
+
+#define SO_REUSE                        1
+#define LWIP_SO_RCVTIMEO                1
 
 /* USER CODE END 1 */
 
