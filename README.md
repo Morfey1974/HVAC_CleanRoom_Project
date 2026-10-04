@@ -17,7 +17,9 @@
 *   `Firmware_Locomotive/` — прошивка концентратора (каркас CubeMX + FDCAN).
 *   `Firmware_HUB_Displays/` — прошивка хаба дисплеев (каркас CubeMX + FDCAN).
 *   `Firmware_MainPLC/` — прошивка Главного ПЛК.
-*   `Firmware_Displays/` — панель TFT5 SSD1963.
+*   `Firmware_Displays/` — панель TFT5 SSD1963 (`Display_TFT4.3`).
+
+У каждого модуля две папки: `Application` — основная прошивка, `Bootloader` — загрузчик. Общее ядро загрузчика и протокол обновления — в `Shared_Libs/boot_core` и `Shared_Libs/fwupd`.
 *   `Web_Interface/` — фронтенд/бэкенд (пока пусто).
 
 ## Особенности

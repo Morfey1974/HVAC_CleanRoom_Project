@@ -28,6 +28,8 @@
 ## 4. Структура (Monorepo)
 `Docs/`, `Shared_Libs/`, `Firmware_Wagons/`, `Firmware_Locomotive/`, `Firmware_HUB_Displays/`, `Firmware_MainPLC/`, `Firmware_Displays/`, `Web_Interface/`.
 
+С 2026-10-04 у каждого модуля две части — два отдельных проекта CubeIDE: `<модуль>/Application` (основная прошивка) и `<модуль>/Bootloader` (загрузчик, пока пусто). Модули: `Firmware_MainPLC`, `Firmware_Locomotive`, `Firmware_HUB_Displays`, `Firmware_Displays/Display_TFT4.3` (проект «STM32H723ZGT6 with TFT5 SSD1963»), `Firmware_Wagons/Analog_Modul_AI|Analog_Modul_AO|Digital_Modul_DI|Digital_Modul_DO`. Имена проектов в CubeIDE не менялись. Общее для загрузчиков: `Shared_Libs/fwupd` (протокол обновления, заголовок прошивки, CRC32), `Shared_Libs/boot_core/stm32g0|stm32h7` (ядро загрузчика по типу чипа). Shared_Libs подключён в проектах как `${workspace_loc:/HVAC_CleanRoom_Project/Shared_Libs}` — от переноса не зависит.
+
 CubeIDE: Hierarchical Presentation.
 
 ## 5. Следующие шаги
