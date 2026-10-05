@@ -29,6 +29,7 @@ builder.Services.AddScoped<ModuleService>();
 builder.Services.AddScoped<SettingsService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<FirmwareService>();
+builder.Services.AddScoped<PlcConfigService>();
 
 builder.Services.AddSingleton<PlcSimulator>();
 builder.Services.AddSingleton<PlcLiveState>();

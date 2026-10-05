@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "hvac_can.h"
+#include "hvac_cfg.h"
 #include "fwupd/fwupd_app.h"
 /* USER CODE END Includes */
 
@@ -37,7 +38,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define LOCO_BOARD_REV    1u
-#define LOCO_FW_VERSION   0x0100u /* major << 8 | minor */
+#define LOCO_FW_VERSION   0x0101u /* major << 8 | minor */
 #define LOCO_APP_START    0x08004000u /* after the 16K bootloader, see linker script */
 /* USER CODE END PD */
 
@@ -94,6 +95,22 @@ static void Fwupd_SendToPlc(uint32_t ext_id, const uint8_t data[8])
   h.FDFormat = FDCAN_CLASSIC_CAN;
   h.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
   CAN_SendFromMain(&hfdcan2, &h, (uint8_t *)data);
+}
+
+/* From the RX interrupt: passes a standard 8-byte frame unchanged to the other bus. */
+static void CAN_Forward(FDCAN_HandleTypeDef *to, uint32_t id, const uint8_t *data)
+{
+  FDCAN_TxHeaderTypeDef h = {0};
+
+  h.Identifier = id;
+  h.IdType = FDCAN_STANDARD_ID;
+  h.TxFrameType = FDCAN_DATA_FRAME;
+  h.DataLength = FDCAN_DLC_BYTES_8;
+  h.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
+  h.BitRateSwitch = FDCAN_BRS_OFF;
+  h.FDFormat = FDCAN_CLASSIC_CAN;
+  h.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
+  HAL_FDCAN_AddMessageToTxFifoQ(to, &h, (uint8_t *)data);
 }
 /* USER CODE END 0 */
 
@@ -263,6 +280,16 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
       {
         FwupdApp_OnRx(RxHeader.Identifier, 1u, RxData,
                       (RxHeader.DataLength == FDCAN_DLC_BYTES_8) ? 8u : 0u);
+      }
+      else if (hfdcan == &hfdcan2 && RxHeader.Identifier == HVAC_CAN_ID_CFG_SET &&
+               RxHeader.DataLength == FDCAN_DLC_BYTES_8)
+      {
+        CAN_Forward(&hfdcan1, HVAC_CAN_ID_CFG_SET, RxData);
+      }
+      else if (hfdcan == &hfdcan1 && RxHeader.Identifier == HVAC_CAN_ID_CFG_STATUS &&
+               RxHeader.DataLength == FDCAN_DLC_BYTES_8)
+      {
+        CAN_Forward(&hfdcan2, HVAC_CAN_ID_CFG_STATUS, RxData);
       }
       else if (hfdcan == &hfdcan1 && RxHeader.Identifier == HVAC_CAN_ID_AI_MEAS)
       {

@@ -67,6 +67,11 @@
 #define PLC_FWUPD_EV_UPLOAD_OK   11u
 #define PLC_FWUPD_EV_UPLOAD_FAIL 12u /* err = FWSTORE_E_* */
 #define PLC_FWUPD_EV_RUN_CANCEL  13u
+/* Configuration (plc_cfg), ver_to = generation */
+#define PLC_FWUPD_EV_CFG_SAVED   14u /* err = PLC_CFG_E_* if the upload failed */
+#define PLC_FWUPD_EV_CFG_OK      15u /* every checkable module confirmed the configuration */
+#define PLC_FWUPD_EV_CFG_ERROR   16u /* module_type = catalogue type, err = PLC_CFG_ERR_* / HVAC_CFG_E_* */
+#define PLC_FWUPD_EV_CFG_RESEND  17u /* module reported another generation, settings sent again */
 
 typedef struct
 {

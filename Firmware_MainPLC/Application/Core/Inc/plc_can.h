@@ -8,6 +8,7 @@
  * forwarded unchanged to the HUB. If the Locomotive is silent for
  * HVAC_AI_LINK_TIMEOUT_MS, the PLC sends NO_LINK frames to the HUB itself.
  * Every HVAC_DOORS_PERIOD_MS the PLC also sends HVAC_CAN_ID_DOORS to the HUB.
+ * Module configuration frames (hvac_cfg.h) go through CAN1, see plc_cfg.
  */
 #ifndef PLC_CAN_H
 #define PLC_CAN_H
@@ -35,5 +36,11 @@ void PlcCan_Task(void);
 
 /* Thread-safe copy of the gateway state, for the web page. */
 void PlcCan_GetSnapshot(PlcAiSnapshot *out);
+
+/* Queues one CAN1 frame from any thread (shared with plc_fwupd); returns 1 if queued. */
+uint8_t PlcCan_SendLoco(uint32_t id, uint8_t is_ext, const uint8_t d[8]);
+
+/* 1: CAN2 frames are acknowledged by someone (not error-passive, not bus-off). */
+uint8_t PlcCan_HubBusOk(void);
 
 #endif /* PLC_CAN_H */

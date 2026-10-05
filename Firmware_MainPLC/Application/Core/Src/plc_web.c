@@ -7,6 +7,8 @@
  *   POST /api/fw/upload?size=N&crc=HEX   body = module .bin (size multiple of 8) -> NEW slot
  *   POST /api/fw/run?type=T&mode=M      update run (PLC_FWUPD_MODE_*)
  *   POST /api/fw/cancel
+ *   POST /api/cfg?size=N&crc=HEX        body = configuration file (hvac_cfg.h) -> stored and applied
+ *   GET  /api/cfg/status                configuration, module check
  */
 #include "plc_web.h"
 
@@ -23,6 +25,7 @@
 #include "plc_fwupd.h"
 #include "plc_fwstore.h"
 #include "plc_w25q.h"
+#include "plc_cfg.h"
 
 #define PLC_WEB_PORT        80u
 #define PLC_WEB_RX_TMO_MS   5000
@@ -293,11 +296,52 @@ static void PlcWeb_FwUploadDone(struct netconn *c, uint8_t err)
   Json_Send(c);
 }
 
+/* ---------- configuration API ---------- */
+
+static void PlcWeb_CfgStatus(struct netconn *c)
+{
+  PlcCfgSummary s;
+  const char *sep = "";
+
+  PlcCfg_GetSummary(&s);
+  s_json_len = 0u;
+  Json_Add("{\"up\":%lu,\"flash\":%u,\"present\":%u,\"gen\":%u,\"state\":%u,\"size\":%lu,\"crc\":\"%08lx\","
+           "\"project\":\"%s\",\"modules\":%u,\"channels\":%u,\"applied\":%lu,\"resends\":%lu,"
+           "\"extraLoco\":%u,\"extraAi\":%u,\"plcVer\":%u,\"mods\":[",
+           (unsigned long)osKernelGetTickCount(), s.flash_ok, s.present, s.gen, s.state, (unsigned long)s.size,
+           (unsigned long)s.crc, s.project, s.module_count, s.channel_count, (unsigned long)s.applied_ms,
+           (unsigned long)s.resends, s.extra_loco, s.extra_ai, PLC_FW_VERSION);
+  for (uint16_t i = 0u; i < s.module_count; i++)
+  {
+    HvacCfgModule m;
+    PlcCfgModState st;
+
+    if (!PlcCfg_GetModule(i, &m, &st)) break;
+    Json_Add("%s{\"type\":%u,\"l\":%u,\"r\":%u,\"p\":%u,\"st\":%u,\"err\":%u,\"ok\":%u,\"bad\":%u,\"ver\":%u}",
+             sep, m.type, m.line, m.rail, m.place, st.state, st.err, st.ok_mask, st.bad_mask, st.version);
+    sep = ",";
+  }
+  Json_Add("]}");
+  Json_Send(c);
+}
+
+static void PlcWeb_CfgUploadDone(struct netconn *c, uint8_t err)
+{
+  uint8_t gen = 0u;
+
+  if (err == PLC_CFG_OK) err = PlcCfg_UploadEnd(&gen);
+  s_json_len = 0u;
+  if (err == PLC_CFG_OK) Json_Add("{\"ok\":true,\"gen\":%u}", gen);
+  else                   Json_Add("{\"ok\":false,\"err\":%u}", err);
+  Json_Send(c);
+}
+
 /* ---------- request handling ---------- */
 
 #define BODY_NONE    0u
 #define BODY_UPLOAD  1u
 #define BODY_DRAIN   2u
+#define BODY_CFG     3u
 
 static void PlcWeb_Serve(struct netconn *c)
 {
@@ -354,6 +398,14 @@ static void PlcWeb_Serve(struct netconn *c)
             else up_err = FwStore_UploadBegin(size, Query_U32(r.query, "crc", 16, 0u));
             body = (up_err == FWSTORE_OK) ? BODY_UPLOAD : BODY_DRAIN;
           }
+          else if (strcmp(r.method, "POST") == 0 && strcmp(r.path, "/api/cfg") == 0)
+          {
+            uint32_t size = Query_U32(r.query, "size", 10, 0u);
+
+            up_err = (size != r.content_length) ? PLC_CFG_E_SIZE
+                                                : PlcCfg_UploadBegin(size, Query_U32(r.query, "crc", 16, 0u));
+            body = (up_err == PLC_CFG_OK) ? BODY_CFG : BODY_DRAIN;
+          }
           else if (r.content_length > 0u)
           {
             body = BODY_DRAIN;
@@ -365,6 +417,7 @@ static void PlcWeb_Serve(struct netconn *c)
 
           if (n > dl) n = dl;
           if (body == BODY_UPLOAD && up_err == FWSTORE_OK) up_err = FwStore_UploadWrite(p, n);
+          if (body == BODY_CFG) PlcCfg_UploadWrite(p, n);
           got += n;
           p += n;
           dl = (u16_t)(dl - n);
@@ -382,6 +435,14 @@ static void PlcWeb_Serve(struct netconn *c)
   if (strcmp(r.path, "/api/fw/upload") == 0 && strcmp(r.method, "POST") == 0)
   {
     PlcWeb_FwUploadDone(c, up_err);
+  }
+  else if (strcmp(r.path, "/api/cfg") == 0 && strcmp(r.method, "POST") == 0)
+  {
+    PlcWeb_CfgUploadDone(c, up_err);
+  }
+  else if (strcmp(r.method, "GET") == 0 && strcmp(r.path, "/api/cfg/status") == 0)
+  {
+    PlcWeb_CfgStatus(c);
   }
   else if (strcmp(r.method, "GET") == 0 && strcmp(r.path, "/api/fw/status") == 0)
   {

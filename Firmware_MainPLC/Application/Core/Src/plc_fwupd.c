@@ -10,6 +10,7 @@
 #include "cmsis_os2.h"
 #include "fwupd/fwupd_proto.h"
 #include "plc_fwstore.h"
+#include "plc_can.h"
 
 #define PLC_FWUPD_CAN            (&hfdcan1)
 #define PLC_FWUPD_QUEUE_LEN      32u
@@ -112,26 +113,16 @@ void PlcFwupd_OnRxIsr(uint32_t id, const uint8_t data[8])
 
 static uint8_t Fw_Send(uint32_t type, uint32_t tag, const uint8_t d[8])
 {
-  FDCAN_TxHeaderTypeDef h = {0};
   uint32_t t0 = osKernelGetTickCount();
 
   if (HAL_FDCAN_GetState(PLC_FWUPD_CAN) != HAL_FDCAN_STATE_BUSY) return 0u;
 
-  h.Identifier = FWUPD_ID(type, tag);
-  h.IdType = FDCAN_EXTENDED_ID;
-  h.TxFrameType = FDCAN_DATA_FRAME;
-  h.DataLength = FDCAN_DLC_BYTES_8;
-  h.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
-  h.BitRateSwitch = FDCAN_BRS_OFF;
-  h.FDFormat = FDCAN_CLASSIC_CAN;
-  h.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
-
-  while (HAL_FDCAN_GetTxFifoFreeLevel(PLC_FWUPD_CAN) == 0u)
+  while (!PlcCan_SendLoco(FWUPD_ID(type, tag), 1u, d))
   {
     if ((osKernelGetTickCount() - t0) >= PLC_FWUPD_T_TX_MS) return 0u;
     osDelay(1);
   }
-  return (HAL_FDCAN_AddMessageToTxFifoQ(PLC_FWUPD_CAN, &h, (uint8_t *)d) == HAL_OK) ? 1u : 0u;
+  return 1u;
 }
 
 /* ---------- node table ---------- */

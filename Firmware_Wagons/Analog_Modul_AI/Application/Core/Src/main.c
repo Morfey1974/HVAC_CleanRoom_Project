@@ -26,6 +26,8 @@
 /* USER CODE BEGIN Includes */
 #include "ads1220.h"
 #include "hvac_can.h"
+#include "hvac_cfg.h"
+#include "fwupd/fwupd_proto.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -35,22 +37,27 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-/* ADS1220 inputs: 4-20 mA over 250 Ohm (1-5 V), scaled x0.2 by INA159 */
-#define AI_MUX_HUMIDITY     0x0Au   /* AIN2, terminal H3, transmitter output 1 */
-#define AI_MUX_TEMPERATURE  0x09u   /* AIN1, terminal H4, transmitter output 2 */
+#define AI_FW_VERSION       0x0101u /* major << 8 | minor */
+
+/* ADS1220 inputs: 0/4-20 mA over 250 Ohm (up to 5 V), scaled x0.2 by INA159 */
+#define AI_CHANNELS         2u
+#define AI_MUX_CH1          0x0Au   /* AIN2, terminal H3 */
+#define AI_MUX_CH2          0x09u   /* AIN1, terminal H4 */
 #define AI_FRONTEND_GAIN    5.0f    /* ADC volts -> volts on the 250 Ohm shunt */
 #define AI_SHUNT_OHM        250.0f
 
-#define AI_LOOP_MIN_MA      3.6f    /* below: open loop */
+#define AI_LOOP_MIN_MA      3.6f    /* 4-20 mA below: open loop */
 #define AI_LOOP_MAX_MA      21.0f   /* above: short / overrange */
 
-/* Rotronic HF5: humidity is always 0..100 %RH; the temperature scale depends on
- * the order code on the label (digit after the probe code): 1 = 0..50 C,
- * 2 = 10..40 C, 3 = -40..60 C, 4 = -30..70 C, 5 = -40..85 C. */
-#define AI_HUM_MIN          0.0f
-#define AI_HUM_MAX          100.0f
-#define AI_TEMP_MIN         0.0f
-#define AI_TEMP_MAX         50.0f
+/* The measurement frame carries 0.01 units in int16. */
+#define AI_VALUE_LIMIT      327.0f
+
+/* Until the Main PLC sends the configuration: bench transmitter Rotronic HF5,
+ * output 1 = humidity 0..100 %RH, output 2 = temperature 0..50 C. */
+#define AI_DEF_CH1_MIN      0.0f
+#define AI_DEF_CH1_MAX      100.0f
+#define AI_DEF_CH2_MIN      0.0f
+#define AI_DEF_CH2_MAX      50.0f
 
 #define AI_SEND_PERIOD_MS   500u
 /* USER CODE END PD */
@@ -63,7 +70,23 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
+typedef struct
+{
+  uint8_t signal;  /* HVAC_SIG_* */
+  float   lo;      /* value at the bottom of the signal */
+  float   hi;      /* value at the top; lo == hi: report the signal itself */
+} AiChannelCfg;
 
+static AiChannelCfg s_ch[AI_CHANNELS] = {
+  { HVAC_SIG_4_20MA, AI_DEF_CH1_MIN, AI_DEF_CH1_MAX },
+  { HVAC_SIG_4_20MA, AI_DEF_CH2_MIN, AI_DEF_CH2_MAX },
+};
+static const uint8_t s_mux[AI_CHANNELS] = { AI_MUX_CH1, AI_MUX_CH2 };
+
+static uint8_t s_cfg_gen;      /* generation of the last CFG_SET, 0 = defaults */
+static uint8_t s_cfg_ok_mask;
+static uint8_t s_cfg_bad_mask;
+static uint8_t s_cfg_last_err;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -74,23 +97,121 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-/* Converts one 4-20 mA channel to engineering units; returns 0 if the loop is faulty. */
-static uint8_t AI_ReadLoop(uint8_t mux, float lo, float hi, float *value, uint8_t *adc_fault)
+/* Converts one channel to engineering units by its configuration; returns 0 if the loop is faulty or off. */
+static uint8_t AI_ReadChannel(uint8_t ch, float *value, uint8_t *adc_fault)
 {
+  const AiChannelCfg *c = &s_ch[ch];
+  float base = (c->signal == HVAC_SIG_4_20MA) ? 4.0f : 0.0f;
   float v_adc;
-  if (ADS1220_ReadVoltage(mux, &v_adc) != HAL_OK)
+
+  *value = 0.0f;
+  if (c->signal == HVAC_SIG_OFF) return 0u;
+  if (ADS1220_ReadVoltage(s_mux[ch], &v_adc) != HAL_OK)
   {
     *adc_fault = 1u;
     return 0u;
   }
   float ma = v_adc * AI_FRONTEND_GAIN / AI_SHUNT_OHM * 1000.0f;
-  if (ma < AI_LOOP_MIN_MA || ma > AI_LOOP_MAX_MA) return 0u;
+  if (ma > AI_LOOP_MAX_MA) return 0u;
+  if (c->signal == HVAC_SIG_4_20MA && ma < AI_LOOP_MIN_MA) return 0u;
+  if (ma < 0.0f) ma = 0.0f;
 
-  float v = lo + (ma - 4.0f) * (hi - lo) / 16.0f;
-  if (v < lo) v = lo;
-  if (v > hi) v = hi;
+  if (c->lo == c->hi)
+  {
+    *value = ma;
+    return 1u;
+  }
+  float v = c->lo + (ma - base) * (c->hi - c->lo) / (20.0f - base);
+  if (v < c->lo) v = c->lo;
+  if (v > c->hi) v = c->hi;
   *value = v;
   return 1u;
+}
+
+static void AI_SendCfgStatus(void)
+{
+  FDCAN_TxHeaderTypeDef h = {0};
+  uint8_t d[8];
+
+  d[0] = FWUPD_TYPE_AI;
+  d[1] = HVAC_CFG_PLACE_ANY;
+  d[2] = (uint8_t)AI_FW_VERSION;
+  d[3] = (uint8_t)(AI_FW_VERSION >> 8);
+  d[4] = s_cfg_gen;
+  d[5] = s_cfg_ok_mask;
+  d[6] = s_cfg_bad_mask;
+  d[7] = s_cfg_last_err;
+
+  h.Identifier = HVAC_CAN_ID_CFG_STATUS;
+  h.IdType = FDCAN_STANDARD_ID;
+  h.TxFrameType = FDCAN_DATA_FRAME;
+  h.DataLength = FDCAN_DLC_BYTES_8;
+  h.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
+  h.BitRateSwitch = FDCAN_BRS_OFF;
+  h.FDFormat = FDCAN_CLASSIC_CAN;
+  h.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
+  HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan2, &h, d);
+}
+
+/* Applies one CFG_SET; the channel keeps its previous setting if the frame is rejected. */
+static void AI_ApplyCfg(const uint8_t d[8])
+{
+  uint8_t ch = d[1];
+  uint8_t sig = d[2];
+  float lo = (float)hvac_cfg_get16(&d[4]) / 10.0f;
+  float hi = (float)hvac_cfg_get16(&d[6]) / 10.0f;
+  uint8_t err = HVAC_CFG_E_OK;
+
+  if (d[0] != HVAC_CFG_PLACE_ANY && d[0] != 1u) return;  /* single AI on the rail until places are assigned */
+
+  if (ch < 1u || ch > AI_CHANNELS) err = HVAC_CFG_E_CHANNEL;
+  else if (sig != HVAC_SIG_OFF && sig != HVAC_SIG_4_20MA && sig != HVAC_SIG_0_20MA) err = HVAC_CFG_E_SIGNAL;
+  else if (sig != HVAC_SIG_OFF && !(lo == 0.0f && hi == 0.0f) &&
+           (lo >= hi || lo < -AI_VALUE_LIMIT || hi > AI_VALUE_LIMIT)) err = HVAC_CFG_E_RANGE;
+
+  /* A new generation starts clean; within one generation the first rejection is kept. */
+  if (d[3] != s_cfg_gen)
+  {
+    s_cfg_gen = d[3];
+    s_cfg_ok_mask = 0u;
+    s_cfg_bad_mask = 0u;
+    s_cfg_last_err = HVAC_CFG_E_OK;
+  }
+  if (err != HVAC_CFG_E_OK && s_cfg_last_err == HVAC_CFG_E_OK) s_cfg_last_err = err;
+  if (ch >= 1u && ch <= AI_CHANNELS)
+  {
+    uint8_t bit = (uint8_t)(1u << (ch - 1u));
+    if (err == HVAC_CFG_E_OK)
+    {
+      s_ch[ch - 1u].signal = sig;
+      s_ch[ch - 1u].lo = lo;
+      s_ch[ch - 1u].hi = hi;
+      s_cfg_ok_mask |= bit;
+      s_cfg_bad_mask &= (uint8_t)~bit;
+    }
+    else
+    {
+      s_cfg_ok_mask &= (uint8_t)~bit;
+      s_cfg_bad_mask |= bit;
+    }
+  }
+}
+
+static void AI_PollRx(void)
+{
+  FDCAN_RxHeaderTypeDef rh;
+  uint8_t d[8];
+
+  while (HAL_FDCAN_GetRxFifoFillLevel(&hfdcan2, FDCAN_RX_FIFO0) > 0u)
+  {
+    if (HAL_FDCAN_GetRxMessage(&hfdcan2, FDCAN_RX_FIFO0, &rh, d) != HAL_OK) break;
+    if (rh.IdType == FDCAN_STANDARD_ID && rh.Identifier == HVAC_CAN_ID_CFG_SET &&
+        rh.DataLength == FDCAN_DLC_BYTES_8)
+    {
+      AI_ApplyCfg(d);
+      AI_SendCfgStatus();
+    }
+  }
 }
 /* USER CODE END 0 */
 
@@ -138,11 +259,15 @@ int main(void)
   TxHeader.FDFormat = FDCAN_CLASSIC_CAN;
   TxHeader.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
   TxHeader.MessageMarker = 0;
-  
+
+  /* Only configuration frames are received; the bus carries nothing else for the AI. */
+  HAL_FDCAN_ConfigGlobalFilter(&hfdcan2, FDCAN_ACCEPT_IN_RX_FIFO0, FDCAN_REJECT,
+                               FDCAN_REJECT_REMOTE, FDCAN_REJECT_REMOTE);
   HAL_FDCAN_Start(&hfdcan2);
 
   HvacAiMeas meas = {0};
   uint32_t last_send = HAL_GetTick() - AI_SEND_PERIOD_MS;
+  uint32_t last_status = HAL_GetTick();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -154,15 +279,24 @@ int main(void)
         HAL_FDCAN_Start(&hfdcan2);
     }
 
+    AI_PollRx();
+
+    if (HAL_GetTick() - last_status >= HVAC_CFG_STATUS_MS)
+    {
+      last_status = HAL_GetTick();
+      AI_SendCfgStatus();
+    }
+
     if (HAL_GetTick() - last_send >= AI_SEND_PERIOD_MS)
     {
       last_send = HAL_GetTick();
 
+      /* Frame fields: humidity = channel 1, temperature = channel 2 (bench layout). */
       uint8_t adc_fault = 0u;
       meas.status = 0u;
-      if (!AI_ReadLoop(AI_MUX_HUMIDITY, AI_HUM_MIN, AI_HUM_MAX, &meas.humidity_pct, &adc_fault))
+      if (!AI_ReadChannel(0u, &meas.humidity_pct, &adc_fault))
         meas.status |= HVAC_AI_ST_HUM_FAULT;
-      if (!AI_ReadLoop(AI_MUX_TEMPERATURE, AI_TEMP_MIN, AI_TEMP_MAX, &meas.temperature_c, &adc_fault))
+      if (!AI_ReadChannel(1u, &meas.temperature_c, &adc_fault))
         meas.status |= HVAC_AI_ST_TEMP_FAULT;
       if (adc_fault) meas.status |= HVAC_AI_ST_ADC_FAULT;
       meas.counter++;

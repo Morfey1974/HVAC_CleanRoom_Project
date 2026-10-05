@@ -281,6 +281,47 @@ export type FirmwareFile = {
 
 export type FirmwareResult = { ok: boolean; error: string | null; plcError: number | null };
 
+export type PlcConfigModule = { index: number; moduleId: string; systemName: string; id: string; type: number; channels: number };
+export type PlcConfigIssue = { code: string; module: string | null; channel: number | null; blocking: boolean };
+export type PlcConfigBuilt = {
+  crc: string;
+  size: number;
+  project: string;
+  modules: PlcConfigModule[];
+  channelCount: number;
+  issues: PlcConfigIssue[];
+};
+/** Module of the configuration the PLC runs: st = 0 not checked, 1 ok, 2 missing, 3 error, 4 applying, 5 on the bus. */
+export type PlcCfgMod = { type: number; l: number; r: number; p: number; st: number; err: number; ok: number; bad: number; ver: number };
+export type PlcCfgStatus = {
+  up: number;
+  flash: number;
+  present: number;
+  gen: number;
+  /** 0 none, 1 ok, 2 applying, 3 errors */
+  state: number;
+  size: number;
+  crc: string;
+  project: string;
+  modules: number;
+  channels: number;
+  applied: number;
+  resends: number;
+  extraLoco: number;
+  extraAi: number;
+  plcVer: number;
+  mods: PlcCfgMod[];
+};
+export type PlcConfigView = {
+  built: PlcConfigBuilt;
+  online: boolean;
+  stale: boolean;
+  error: string | null;
+  plc: PlcCfgStatus | null;
+  matches: boolean;
+};
+export type PlcConfigUploadResult = { ok: boolean; error: string | null; plcError: number | null; gen: number | null };
+
 /** Roles of a PLC store slot: 1 current, 2 new, 3 backup. */
 export type PlcFwSlot = { type: number; idx: number; role: number; board: number; ver: number; size: number; crc: string };
 
@@ -427,4 +468,8 @@ export const api = {
     request<FirmwareResult>(`/api/firmware/run?type=${type}&mode=${mode}&${q(reason)}`, { method: 'POST' }, t),
   cancelFirmware: (t: string) => request<FirmwareResult>('/api/firmware/cancel', { method: 'POST' }, t),
   plcFirmware: (t: string, logAfter: number) => request<PlcFwStatus>(`/api/firmware/plc?log=${logAfter}`, {}, t),
+
+  plcConfig: (t: string, pid: string) => request<PlcConfigView>(`${P(pid)}/plc-config`, {}, t),
+  uploadPlcConfig: (t: string, pid: string, reason?: string) =>
+    request<PlcConfigUploadResult>(`${P(pid)}/plc-config/upload?${q(reason)}`, { method: 'POST' }, t),
 };

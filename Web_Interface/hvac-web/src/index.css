@@ -1785,6 +1785,81 @@ label.btn.disabled {
   margin-bottom: 0.15rem;
 }
 
+/* Configuration upload to the PLC */
+.cfg-page .card h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+}
+.cfg-page .warning-banner,
+.cfg-page .error-banner,
+.cfg-page .success-banner {
+  margin-bottom: 1rem;
+}
+.cfg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1rem;
+}
+.cfg-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25rem 1rem;
+  margin: 0.5rem 0 0.75rem;
+}
+.cfg-issues {
+  margin: 0.35rem 0 0;
+  padding-inline-start: 1.2rem;
+  font-size: 0.9rem;
+}
+.cfg-issue--block {
+  color: var(--error);
+}
+.cfg-issue--warn {
+  color: var(--warning);
+}
+.cfg-state {
+  display: inline-block;
+  padding: 0.3rem 0.7rem;
+  border-radius: 8px;
+  font-weight: 600;
+  background: var(--surface-2, rgba(127, 127, 127, 0.12));
+}
+.cfg-state--1 {
+  background: var(--success-bg);
+  color: var(--success);
+}
+.cfg-state--2 {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.cfg-state--3 {
+  background: var(--error-bg);
+  color: var(--error);
+}
+.cfg-match {
+  color: var(--success);
+}
+.cfg-differs {
+  color: var(--warning);
+}
+.cfg-st {
+  font-weight: 600;
+}
+.cfg-st--0,
+.cfg-st--5 {
+  color: var(--text-muted);
+}
+.cfg-st--1 {
+  color: var(--success);
+}
+.cfg-st--2,
+.cfg-st--3 {
+  color: var(--error);
+}
+.cfg-st--4 {
+  color: var(--warning);
+}
+
 /* Monitoring: link chain and room cards */
 .chain-bar {
   display: flex;

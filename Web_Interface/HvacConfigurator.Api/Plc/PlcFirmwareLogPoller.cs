@@ -17,7 +17,9 @@ public class PlcFirmwareLogPoller(PlcFirmwareClient plc, IServiceScopeFactory sc
         [1] = "node_new", [2] = "node_lost", [3] = "node_state", [4] = "update_start", [5] = "update_ok",
         [6] = "update_fail", [7] = "started", [8] = "run_start", [9] = "run_end", [10] = "promote",
         [11] = "upload_ok", [12] = "upload_fail", [13] = "run_cancel",
+        [14] = "cfg_saved", [15] = "cfg_ok", [16] = "cfg_error", [17] = "cfg_resend",
     };
+    private const int FirstConfigEvent = 14;
 
     private long _boot;
     private long _lastId;
@@ -86,9 +88,10 @@ public class PlcFirmwareLogPoller(PlcFirmwareClient plc, IServiceScopeFactory sc
             var to = e.GetProperty("to").GetInt32();
 
             var target = (tag == "000000" ? $"type {type}" : $"type {type} node {tag}") + $" ({Marker(boot)}{id})";
+            var cfg = ev >= FirstConfigEvent;
             audit.Add("plc.fw." + (Events.TryGetValue(ev, out var name) ? name : ev.ToString()), target,
-                oldValue: from != 0 ? FirmwareImage.VersionText(from) : null,
-                newValue: to != 0 ? FirmwareImage.VersionText(to) : null,
+                oldValue: from == 0 ? null : cfg ? $"gen {from}" : FirmwareImage.VersionText(from),
+                newValue: to == 0 ? null : cfg ? $"gen {to}" : FirmwareImage.VersionText(to),
                 reason: err != 0 ? $"err 0x{err:x2}, step {step}" : null,
                 loginOverride: "PLC");
             added = true;

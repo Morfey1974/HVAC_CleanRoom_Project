@@ -15,6 +15,7 @@ import { JournalPage } from './JournalPage';
 import { StubPage } from './StubPage';
 import { HardwarePage } from './HardwarePage';
 import { SchemePage } from './SchemePage';
+import { ExportPage } from './ExportPage';
 
 const stubs: { path: string; minRole: Role }[] = [
   { path: 'signals', minRole: 'Engineer' },
@@ -22,7 +23,6 @@ const stubs: { path: string; minRole: Role }[] = [
   { path: 'regulators', minRole: 'Engineer' },
   { path: 'mnemo', minRole: 'Engineer' },
   { path: 'commissioning', minRole: 'Engineer' },
-  { path: 'export', minRole: 'Engineer' },
 ];
 
 const guard = (minRole: Role, el: ReactNode) => <ProtectedRoute minRole={minRole}>{el}</ProtectedRoute>;
@@ -48,6 +48,7 @@ export function ProjectRoutes() {
       <Route path="monitoring" element={<MonitoringPage />} />
       <Route path="alarms" element={<AlarmsPage />} />
       <Route path="journal" element={guard('Engineer', <JournalPage />)} />
+      <Route path="export" element={guard('Engineer', <ExportPage />)} />
       {stubs.map((s) => (
         <Route key={s.path} path={s.path} element={guard(s.minRole, <StubPage section={s.path} />)} />
       ))}

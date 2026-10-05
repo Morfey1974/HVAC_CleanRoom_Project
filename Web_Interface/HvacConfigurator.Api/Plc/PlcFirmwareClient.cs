@@ -59,6 +59,24 @@ public class PlcFirmwareClient(IServiceScopeFactory scopes)
         finally { Uploading = false; _gate.Release(); }
     }
 
+    /// <summary>Configuration file (Shared_Libs/hvac_cfg.h); the PLC stores it and answers {ok, gen | err}.</summary>
+    public async Task<string> UploadConfigAsync(byte[] blob, uint crc, CancellationToken ct)
+    {
+        var body = new ByteArrayContent(blob);
+        body.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+        if (!await _gate.WaitAsync(TimeSpan.FromSeconds(10), ct)) throw new PlcUnavailableException("plc_busy");
+        try { return await SendAsync(HttpMethod.Post, $"/api/cfg?size={blob.Length}&crc={crc:x8}", body, TimeSpan.FromSeconds(15), ct); }
+        finally { _gate.Release(); }
+    }
+
+    /// <summary>Configuration and module check (/api/cfg/status). Null when the PLC is busy with another request.</summary>
+    public async Task<string?> GetConfigStatusAsync(CancellationToken ct)
+    {
+        if (!await _gate.WaitAsync(TimeSpan.FromSeconds(1), ct)) return null;
+        try { return await SendAsync(HttpMethod.Get, "/api/cfg/status", null, ShortTimeout, ct); }
+        finally { _gate.Release(); }
+    }
+
     public Task<string> RunAsync(int moduleType, int mode, CancellationToken ct) =>
         CommandAsync($"/api/fw/run?type={moduleType}&mode={mode}", ct);
 

@@ -10,6 +10,7 @@
 #include "cmsis_os2.h"
 #include "plc_modbus.h"
 #include "plc_fwupd.h"
+#include "plc_cfg.h"
 
 #define PLC_CAN_LOCO        (&hfdcan1)
 #define PLC_CAN_HUB         (&hfdcan2)
@@ -36,7 +37,7 @@ static HAL_StatusTypeDef PlcCan_Start(void)
   f.FilterType = FDCAN_FILTER_DUAL;
   f.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
   f.FilterID1 = HVAC_CAN_ID_AI_MEAS;
-  f.FilterID2 = HVAC_CAN_ID_AI_MEAS;
+  f.FilterID2 = HVAC_CAN_ID_CFG_STATUS;
   if (HAL_FDCAN_ConfigFilter(PLC_CAN_LOCO, &f) != HAL_OK) return HAL_ERROR;
   /* Extended IDs on CAN1 = firmware update protocol (plc_fwupd). */
   if (HAL_FDCAN_ConfigGlobalFilter(PLC_CAN_LOCO, FDCAN_REJECT, FDCAN_ACCEPT_IN_RX_FIFO0,
@@ -125,6 +126,11 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
       {
         if (s_loco_q == NULL || osMessageQueuePut(s_loco_q, &f, 0u, 0u) != osOK) s_rx_drop++;
       }
+      else if (rh.IdType == FDCAN_STANDARD_ID && rh.Identifier == HVAC_CAN_ID_CFG_STATUS &&
+               rh.DataLength == FDCAN_DLC_BYTES_8)
+      {
+        PlcCfg_OnStatusIsr(f.data);
+      }
     }
     else if (hfdcan == PLC_CAN_HUB)
     {
@@ -140,6 +146,37 @@ void PlcCan_GetSnapshot(PlcAiSnapshot *out)
   out->rx_hub = s_rx_hub;
   out->rx_drop = s_rx_drop;
   taskEXIT_CRITICAL();
+}
+
+uint8_t PlcCan_SendLoco(uint32_t id, uint8_t is_ext, const uint8_t d[8])
+{
+  FDCAN_TxHeaderTypeDef h = {0};
+  uint8_t ok = 0u;
+
+  if (HAL_FDCAN_GetState(PLC_CAN_LOCO) != HAL_FDCAN_STATE_BUSY) return 0u;
+  h.Identifier = id;
+  h.IdType = is_ext ? FDCAN_EXTENDED_ID : FDCAN_STANDARD_ID;
+  h.TxFrameType = FDCAN_DATA_FRAME;
+  h.DataLength = FDCAN_DLC_BYTES_8;
+  h.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
+  h.BitRateSwitch = FDCAN_BRS_OFF;
+  h.FDFormat = FDCAN_CLASSIC_CAN;
+  h.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
+
+  /* Two tasks write CAN1: the free-level check and the FIFO put must not interleave. */
+  taskENTER_CRITICAL();
+  if (HAL_FDCAN_GetTxFifoFreeLevel(PLC_CAN_LOCO) > 0u &&
+      HAL_FDCAN_AddMessageToTxFifoQ(PLC_CAN_LOCO, &h, (uint8_t *)d) == HAL_OK) ok = 1u;
+  taskEXIT_CRITICAL();
+  return ok;
+}
+
+uint8_t PlcCan_HubBusOk(void)
+{
+  FDCAN_ProtocolStatusTypeDef ps;
+
+  if (!s_snap.init_ok || HAL_FDCAN_GetProtocolStatus(PLC_CAN_HUB, &ps) != HAL_OK) return 0u;
+  return (ps.ErrorPassive == 0u && ps.BusOff == 0u) ? 1u : 0u;
 }
 
 void PlcCan_Task(void)
@@ -187,6 +224,8 @@ void PlcCan_Task(void)
     }
 
     now = osKernelGetTickCount();
+
+    if (s_snap.init_ok) PlcCfg_Poll();
 
     if ((now - last_rx) >= HVAC_AI_LINK_TIMEOUT_MS &&
         (now - last_no_link_tx) >= HVAC_AI_NO_LINK_PERIOD_MS)
