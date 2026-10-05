@@ -17,6 +17,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
     public DbSet<AlarmEvent> AlarmEvents => Set<AlarmEvent>();
     public DbSet<SystemSettings> SystemSettings => Set<SystemSettings>();
+    public DbSet<FirmwareFile> FirmwareFiles => Set<FirmwareFile>();
 
     private static void LocalizedName<T>(OwnedNavigationBuilder<T, LocalizedText> n, int max) where T : class
     {
@@ -102,6 +103,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.Manufacturer).HasMaxLength(128);
             e.Property(x => x.Model).HasMaxLength(128);
             e.Property(x => x.Description).HasMaxLength(4000);
+            e.Property(x => x.OutputsJson).HasDefaultValue("[]");
         });
 
         b.Entity<ProjectEquipment>(e =>
@@ -133,6 +135,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             e.Property(x => x.StartupLanguage).HasMaxLength(8);
             e.Property(x => x.PlcMode).HasMaxLength(16);
+        });
+
+        b.Entity<FirmwareFile>(e =>
+        {
+            e.HasIndex(x => new { x.ModuleType, x.UploadedAt });
+            e.Property(x => x.FileName).HasMaxLength(260);
+            e.Property(x => x.Notes).HasMaxLength(1000);
+            e.Property(x => x.UploadedBy).HasMaxLength(64);
         });
     }
 }

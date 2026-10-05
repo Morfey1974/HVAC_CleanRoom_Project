@@ -115,6 +115,59 @@ namespace HvacConfigurator.Api.Migrations
                     b.ToTable("AuditEntries");
                 });
 
+            modelBuilder.Entity("HvacConfigurator.Api.Entities.FirmwareFile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("BoardRev")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("Crc32")
+                        .HasColumnType("bigint");
+
+                    b.Property<byte[]>("Data")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("character varying(260)");
+
+                    b.Property<int>("ModuleType")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Notes")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime?>("SentToPlcAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("UploadedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UploadedBy")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ModuleType", "UploadedAt");
+
+                    b.ToTable("FirmwareFiles");
+                });
+
             modelBuilder.Entity("HvacConfigurator.Api.Entities.LibraryItem", b =>
                 {
                     b.Property<Guid>("Id")
@@ -159,6 +212,12 @@ namespace HvacConfigurator.Api.Migrations
                         .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
+
+                    b.Property<string>("OutputsJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("[]");
 
                     b.Property<string>("PropsJson")
                         .IsRequired()

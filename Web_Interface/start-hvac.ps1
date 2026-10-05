@@ -1,4 +1,4 @@
-# HVAC CleanRoom — one-click start: DB (docker) + API + web UI, then open the browser.
+﻿# HVAC CleanRoom — one-click start: DB (docker) + API + web UI, then open the browser.
 # Not 'Stop': in Windows PowerShell docker warnings on stderr would abort the script.
 $ErrorActionPreference = 'Continue'
 trap {

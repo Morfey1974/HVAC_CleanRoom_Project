@@ -71,6 +71,7 @@ public class ModuleService(AppDbContext db, AuditService audit)
         // No channel list in the request keeps the current settings that still fit the module.
         var channelInput = req.Channels ?? (row is null ? [] : ChannelsOf(row));
         if (CleanChannels(channelInput, lib, req.Channels is not null, out var channels) is { } chErr) return (null, chErr);
+        if (req.Channels is not null && await CheckBindingsAsync(projectId, channels, ct) is { } bErr) return (null, bErr);
 
         var isNew = row is null;
         var before = isNew ? null : Localized.ToJson(Summary(Place(row!)));
@@ -403,19 +404,44 @@ public class ModuleService(AppDbContext db, AuditService audit)
     {
         var modes = lib.ChannelModes ?? [];
         var count = lib.ChannelCount ?? 0;
-        var map = new SortedDictionary<int, string>();
+        var map = new SortedDictionary<int, ModuleChannelDto>();
         foreach (var c in input)
         {
-            if (string.IsNullOrWhiteSpace(c.Mode)) continue;
-            var fits = c.Channel >= 1 && c.Channel <= count && modes.Contains(c.Mode);
-            if (!fits && strict)
+            var mode = c.Mode?.Trim() ?? "";
+            // A sensor without an output yet is kept: the output is picked next.
+            var bound = c.EquipmentId is not null;
+            if (mode.Length == 0 && !bound) continue;
+            var inRange = c.Channel >= 1 && c.Channel <= count;
+            var modeOk = mode.Length == 0 || modes.Contains(mode);
+            if ((!inRange || !modeOk) && strict)
             {
                 clean = [];
-                return c.Channel < 1 || c.Channel > count ? "channel_range" : "channel_mode";
+                return !inRange ? "channel_range" : "channel_mode";
             }
-            if (fits) map[c.Channel] = c.Mode;
+            if (!inRange) continue;
+            map[c.Channel] = new ModuleChannelDto(c.Channel, modeOk ? mode : "", bound ? c.EquipmentId : null, bound ? c.Output : null);
         }
-        clean = map.Select(kv => new ModuleChannelDto(kv.Key, kv.Value)).ToList();
+        clean = map.Values.ToList();
+        return null;
+    }
+
+    /// <summary>A bound channel must point to a sensor of this project and one of its outputs.</summary>
+    private async Task<string?> CheckBindingsAsync(Guid projectId, IReadOnlyList<ModuleChannelDto> channels, CancellationToken ct)
+    {
+        var ids = channels.Where(c => c.EquipmentId is not null).Select(c => c.EquipmentId!.Value).Distinct().ToList();
+        if (ids.Count == 0) return null;
+        var rows = await db.ProjectEquipment.AsNoTracking().Where(e => e.ProjectId == projectId && ids.Contains(e.Id))
+            .Select(e => new { e.Id, e.SnapshotJson }).ToListAsync(ct);
+        foreach (var c in channels.Where(c => c.EquipmentId is not null))
+        {
+            var row = rows.FirstOrDefault(r => r.Id == c.EquipmentId);
+            if (row is null) return "binding_equipment";
+            LibraryItemDto? snap = null;
+            try { snap = JsonSerializer.Deserialize<LibraryItemDto>(row.SnapshotJson, Localized.Json); }
+            catch (JsonException) { }
+            if (snap?.Outputs is not { Count: > 0 } outs) return "binding_output";
+            if (c.Output is not null && !outs.Any(o => o.No == c.Output)) return "binding_output";
+        }
         return null;
     }
 
@@ -429,7 +455,7 @@ public class ModuleService(AppDbContext db, AuditService audit)
         serial = p.Row.ExpectedSerial,
         p.Row.Revision,
         userName = p.Row.UserName.ToDto(),
-        channels = ChannelsOf(p.Row).Select(c => $"{c.Channel}:{c.Mode}"),
+        channels = ChannelsOf(p.Row).Select(c => c.EquipmentId is null ? $"{c.Channel}:{c.Mode}" : $"{c.Channel}:{c.Mode}:{c.EquipmentId}/{c.Output}"),
     };
 
     private static ProjectModuleDto ToDto(Placed p, int? latest) => new(

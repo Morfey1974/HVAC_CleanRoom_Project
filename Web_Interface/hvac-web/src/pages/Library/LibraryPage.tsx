@@ -1,7 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { NavLink, Navigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { api, libraryCategories, type LibraryCategory, type LibraryItem, type LibraryItemSave } from '../../api/client';
+import {
+  api,
+  libraryCategories,
+  quantities,
+  type LibraryCategory,
+  type LibraryItem,
+  type LibraryItemSave,
+  type Quantity,
+  type SensorOutput,
+} from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { formatDate, pickName } from '../../lib/localized';
 import { BidiText, bidiAutoInput } from '../../components/BidiText';
@@ -66,6 +75,7 @@ export function LibraryPage() {
         channelCount: null,
         graphic: cat === 'module' ? emptyGraphic() : null,
         channelModes: [],
+        outputs: [],
       },
     });
 
@@ -89,6 +99,7 @@ export function LibraryPage() {
         channelCount: i.channelCount,
         graphic: i.graphic ? structuredClone(i.graphic) : i.category === 'module' ? emptyGraphic() : null,
         channelModes: [...(i.channelModes ?? [])],
+        outputs: (i.outputs ?? []).map((o) => ({ ...o })),
         reason: '',
       },
     });
@@ -123,6 +134,13 @@ export function LibraryPage() {
         d.graphic = null;
         d.channelModes = [];
       }
+      if (d.category === 'sensor') {
+        for (const o of d.outputs ?? []) {
+          if (!Number.isFinite(o.min) || !Number.isFinite(o.max) || o.min >= o.max) throw new Error('output_range');
+        }
+      } else {
+        d.outputs = [];
+      }
       if (edit.id) await api.updateLibraryItem(token, edit.id, d);
       else await api.createLibraryItem(token, d);
       setEdit(null);
@@ -148,6 +166,12 @@ export function LibraryPage() {
   const setData = (patch: Partial<LibraryItemSave>) => edit && setEdit({ ...edit, data: { ...edit.data, ...patch } });
   const setProp = (idx: number, key: 'key' | 'value' | 'unit', v: string) =>
     edit && setData({ props: edit.data.props.map((p, i) => (i === idx ? { ...p, [key]: v } : p)) });
+  const outputs = edit?.data.outputs ?? [];
+  const setOutput = (idx: number, patch: Partial<SensorOutput>) =>
+    setData({ outputs: outputs.map((o, i) => (i === idx ? { ...o, ...patch } : o)) });
+  const addOutput = () =>
+    setData({ outputs: [...outputs, { no: outputs.length + 1, quantity: 'temperature', signal: '4-20mA', min: 0, max: 50, unit: '°C' }] });
+  const removeOutput = (idx: number) => setData({ outputs: outputs.filter((_, i) => i !== idx).map((o, i) => ({ ...o, no: i + 1 })) });
 
   return (
     <div className="page">
@@ -383,6 +407,54 @@ export function LibraryPage() {
               {t('projects.fields.description')}
               <textarea rows={2} value={edit.data.description} onChange={(e) => setData({ description: e.target.value })} {...bidiAutoInput()} />
             </label>
+
+            {edit.data.category === 'sensor' && (
+              <div>
+                <div className="props-head">
+                  <b>{t('library.outputs')}</b>
+                  <button type="button" className="btn btn-small btn-ghost-inline" onClick={addOutput}>
+                    + {t('library.addOutput')}
+                  </button>
+                </div>
+                {outputs.length > 0 && (
+                  <div className="output-row output-row--head small muted">
+                    <span>№</span>
+                    <span>{t('library.outputQuantity')}</span>
+                    <span>{t('library.outputSignal')}</span>
+                    <span>{t('library.outputMin')}</span>
+                    <span>{t('library.outputMax')}</span>
+                    <span>{t('library.propUnit')}</span>
+                    <span />
+                  </div>
+                )}
+                {outputs.map((o, idx) => (
+                  <div key={idx} className="output-row">
+                    <span className="ltr-value">{idx + 1}</span>
+                    <select value={o.quantity} onChange={(e) => setOutput(idx, { quantity: e.target.value as Quantity })}>
+                      {quantities.map((q) => (
+                        <option key={q} value={q}>
+                          {t(`quantities.${q}`)}
+                        </option>
+                      ))}
+                    </select>
+                    <select value={o.signal} onChange={(e) => setOutput(idx, { signal: e.target.value })}>
+                      {SIGNAL_MODES.map((m) => (
+                        <option key={m} value={m}>
+                          {t(`channels.modes.${m}`)}
+                        </option>
+                      ))}
+                    </select>
+                    <input type="number" dir="ltr" step="any" value={o.min} onChange={(e) => setOutput(idx, { min: e.target.valueAsNumber })} />
+                    <input type="number" dir="ltr" step="any" value={o.max} onChange={(e) => setOutput(idx, { max: e.target.valueAsNumber })} />
+                    <input dir="ltr" value={o.unit} onChange={(e) => setOutput(idx, { unit: e.target.value })} />
+                    <button type="button" className="btn btn-small btn-ghost-inline" onClick={() => removeOutput(idx)}>
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                <span className="field-hint">{t('library.outputsHint')}</span>
+              </div>
+            )}
 
             <div>
               <div className="props-head">

@@ -28,10 +28,16 @@ builder.Services.AddScoped<EquipmentService>();
 builder.Services.AddScoped<ModuleService>();
 builder.Services.AddScoped<SettingsService>();
 builder.Services.AddScoped<UserService>();
+builder.Services.AddScoped<FirmwareService>();
 
-builder.Services.AddSingleton<IPlcLink, PlcSimulator>();
+builder.Services.AddSingleton<PlcSimulator>();
+builder.Services.AddSingleton<PlcLiveState>();
+builder.Services.AddSingleton<IPlcLink, PlcLinkRouter>();
 builder.Services.AddSingleton<LiveState>();
 builder.Services.AddHostedService<LivePoller>();
+builder.Services.AddSingleton<PlcFirmwareClient>();
+builder.Services.AddHostedService<PlcFirmwareLogPoller>();
+builder.Services.AddHostedService<PlcLiveReader>();
 
 var jwt = builder.Configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>() ?? new JwtSettings();
 if (jwt.Secret.Length < 32)

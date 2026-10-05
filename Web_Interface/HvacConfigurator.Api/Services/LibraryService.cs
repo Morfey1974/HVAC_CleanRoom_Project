@@ -73,6 +73,7 @@ public class LibraryService(AppDbContext db, AuditService audit)
         if (code.Length == 0 && !r.Name.HasAny()) return "name_required";
         if (code.Length > 0 && await db.LibraryItems.AnyAsync(x => x.Id != id && x.Code == code, ct)) return "article_taken";
 
+        if (r.Category == LibraryCategories.Sensor) return ValidateOutputs(r.Outputs ?? []);
         if (r.Category != LibraryCategories.Module) return null;
         if (!ModuleRules.ArticleFormat().IsMatch(code)) return "article_format";
         if (r.TypeCode is not (>= 1 and <= 255)) return "type_code_required";
@@ -80,6 +81,21 @@ public class LibraryService(AppDbContext db, AuditService audit)
         if ((r.ChannelModes ?? []).Any(m => !ModuleRules.SignalModes.Contains(m))) return "channel_mode";
         if (await db.LibraryItems.AnyAsync(x => x.Id != id && x.Category == LibraryCategories.Module && x.TypeCode == r.TypeCode && !x.IsArchived, ct))
             return "type_code_taken";
+        return null;
+    }
+
+    public static readonly string[] Quantities = ["temperature", "humidity", "pressure", "flow", "other"];
+    public const int MaxOutputs = 16;
+
+    private static string? ValidateOutputs(IReadOnlyList<SensorOutputDto> outputs)
+    {
+        if (outputs.Count > MaxOutputs) return "outputs_count";
+        foreach (var o in outputs)
+        {
+            if (!Quantities.Contains(o.Quantity)) return "output_quantity";
+            if (!ModuleRules.SignalModes.Contains(o.Signal)) return "output_signal";
+            if (!double.IsFinite(o.Min) || !double.IsFinite(o.Max) || o.Min >= o.Max) return "output_range";
+        }
         return null;
     }
 
@@ -122,6 +138,16 @@ public class LibraryService(AppDbContext db, AuditService audit)
         var props = (q.Props ?? []).Where(p => !string.IsNullOrWhiteSpace(p.Key))
             .Select(p => new LibraryPropDto(p.Key.Trim(), p.Value?.Trim() ?? "", p.Unit?.Trim() ?? "")).ToList();
         i.PropsJson = JsonSerializer.Serialize(props, Localized.Json);
+        // Outputs are numbered in list order: channel bindings refer to the number.
+        var outputs = q.Category != LibraryCategories.Sensor ? []
+            : (q.Outputs ?? []).Select((o, n) => o with { No = n + 1, Unit = o.Unit?.Trim() ?? "" }).ToList();
+        i.OutputsJson = JsonSerializer.Serialize(outputs, Localized.Json);
+    }
+
+    public static IReadOnlyList<SensorOutputDto> ParseOutputs(string json)
+    {
+        try { return JsonSerializer.Deserialize<List<SensorOutputDto>>(json, Localized.Json) ?? []; }
+        catch (JsonException) { return []; }
     }
 
     private static string Label(LibraryItem i) => string.IsNullOrWhiteSpace(i.Code) ? i.Name.Label(i.Id.ToString()) : i.Code;
@@ -144,5 +170,5 @@ public class LibraryService(AppDbContext db, AuditService audit)
     public static LibraryItemDto ToDto(LibraryItem i, int used) => new(
         i.Id, i.Category, i.Code, i.Name.ToDto(), i.Manufacturer, i.Model, i.Description,
         ParseProps(i.PropsJson), i.Version, i.IsArchived, i.UpdatedAt, used,
-        i.TypeCode, i.SystemPrefix, i.ChannelCount, KindName(i), GraphicOf(i), i.ChannelModes);
+        i.TypeCode, i.SystemPrefix, i.ChannelCount, KindName(i), GraphicOf(i), i.ChannelModes, ParseOutputs(i.OutputsJson));
 }

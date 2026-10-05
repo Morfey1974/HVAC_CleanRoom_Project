@@ -29,6 +29,7 @@
 #include "plc_can.h"
 #include "plc_web.h"
 #include "plc_modbus.h"
+#include "plc_fwupd.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -113,6 +114,7 @@ void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
   PlcModbus_Start();
+  PlcFwupd_Start();
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */

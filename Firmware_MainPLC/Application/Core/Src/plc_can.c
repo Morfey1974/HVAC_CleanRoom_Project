@@ -9,6 +9,7 @@
 #include "task.h"
 #include "cmsis_os2.h"
 #include "plc_modbus.h"
+#include "plc_fwupd.h"
 
 #define PLC_CAN_LOCO        (&hfdcan1)
 #define PLC_CAN_HUB         (&hfdcan2)
@@ -37,7 +38,8 @@ static HAL_StatusTypeDef PlcCan_Start(void)
   f.FilterID1 = HVAC_CAN_ID_AI_MEAS;
   f.FilterID2 = HVAC_CAN_ID_AI_MEAS;
   if (HAL_FDCAN_ConfigFilter(PLC_CAN_LOCO, &f) != HAL_OK) return HAL_ERROR;
-  if (HAL_FDCAN_ConfigGlobalFilter(PLC_CAN_LOCO, FDCAN_REJECT, FDCAN_REJECT,
+  /* Extended IDs on CAN1 = firmware update protocol (plc_fwupd). */
+  if (HAL_FDCAN_ConfigGlobalFilter(PLC_CAN_LOCO, FDCAN_REJECT, FDCAN_ACCEPT_IN_RX_FIFO0,
                                    FDCAN_REJECT_REMOTE, FDCAN_REJECT_REMOTE) != HAL_OK) return HAL_ERROR;
 
   /* HUB side: nothing is processed yet, frames are only counted. */
@@ -111,7 +113,14 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 
     if (hfdcan == PLC_CAN_LOCO)
     {
-      if (rh.IdType == FDCAN_STANDARD_ID && rh.Identifier == HVAC_CAN_ID_AI_MEAS &&
+      if (rh.IdType == FDCAN_EXTENDED_ID)
+      {
+        if (rh.RxFrameType == FDCAN_DATA_FRAME && rh.DataLength == FDCAN_DLC_BYTES_8)
+        {
+          PlcFwupd_OnRxIsr(rh.Identifier, f.data);
+        }
+      }
+      else if (rh.IdType == FDCAN_STANDARD_ID && rh.Identifier == HVAC_CAN_ID_AI_MEAS &&
           rh.DataLength == FDCAN_DLC_BYTES_8)
       {
         if (s_loco_q == NULL || osMessageQueuePut(s_loco_q, &f, 0u, 0u) != osOK) s_rx_drop++;

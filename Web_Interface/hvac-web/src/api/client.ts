@@ -98,16 +98,28 @@ export type LibraryItem = {
   graphic: ModuleGraphic | null;
   /** Signal types a channel can be set to; the project picks one per channel. */
   channelModes: string[] | null;
+  /** Sensors: measured outputs, numbered 1.. in list order. */
+  outputs: SensorOutput[] | null;
 };
 
-export type LibraryItemSave = Omit<LibraryItem, 'id' | 'version' | 'isArchived' | 'updatedAt' | 'usedInProjects' | 'kind' | 'graphic' | 'channelModes'> & {
+export type Quantity = 'temperature' | 'humidity' | 'pressure' | 'flow' | 'other';
+export const quantities: Quantity[] = ['temperature', 'humidity', 'pressure', 'flow', 'other'];
+
+/** Sensor output: what it measures, its signal and the values at the signal range ends. */
+export type SensorOutput = { no: number; quantity: Quantity; signal: string; min: number; max: number; unit: string };
+
+export type LibraryItemSave = Omit<
+  LibraryItem,
+  'id' | 'version' | 'isArchived' | 'updatedAt' | 'usedInProjects' | 'kind' | 'graphic' | 'channelModes' | 'outputs'
+> & {
   graphic?: ModuleGraphic | null;
   channelModes?: string[] | null;
+  outputs?: SensorOutput[] | null;
   reason?: string;
 };
 
-/** Signal type of one module channel in the project; goes to the module firmware. */
-export type ModuleChannel = { channel: number; mode: string };
+/** One module channel in the project: signal type (goes to the module firmware) and the sensor output wired to it. */
+export type ModuleChannel = { channel: number; mode: string; equipmentId?: string | null; output?: number | null };
 
 export type PortType = 'can' | 'rs485' | 'eth' | 'pwr24' | 'ai' | 'ao' | 'di' | 'do' | 'relay' | 'usb' | 'other';
 export const portTypes: PortType[] = ['can', 'rs485', 'eth', 'pwr24', 'ai', 'ao', 'di', 'do', 'relay', 'usb', 'other'];
@@ -252,6 +264,64 @@ export type AlarmEvent = {
   ackBy: string | null;
 };
 
+export type FirmwareFile = {
+  id: string;
+  moduleType: number;
+  boardRev: number;
+  /** major << 8 | minor */
+  version: number;
+  sizeBytes: number;
+  crc32: string;
+  fileName: string;
+  notes: string;
+  uploadedAt: string;
+  uploadedBy: string;
+  sentToPlcAt: string | null;
+};
+
+export type FirmwareResult = { ok: boolean; error: string | null; plcError: number | null };
+
+/** Roles of a PLC store slot: 1 current, 2 new, 3 backup. */
+export type PlcFwSlot = { type: number; idx: number; role: number; board: number; ver: number; size: number; crc: string };
+
+export type PlcFwNode = {
+  tag: string;
+  type: number;
+  board: number;
+  state: number;
+  boot: number;
+  ver: number;
+  fails: number;
+  link: number;
+  mismatch: number;
+  result: number;
+  attempts: number;
+  err: number;
+  step: number;
+  age: number;
+};
+
+export type PlcFwLog = { id: number; t: number; tag: string; type: number; ev: number; err: number; step: number; from: number; to: number };
+
+export type PlcFwState = {
+  up: number;
+  boot: number;
+  store: number;
+  jedec: string;
+  upload: number;
+  run: { active: number; type: number; mode: number; ver: number; done: number; failed: number };
+  busy: number;
+  busyTag: string;
+  step: number;
+  progress: number;
+  stats: { ok: number; failed: number; retries: number; rx: number; drop: number };
+  slots: PlcFwSlot[];
+  nodes: PlcFwNode[];
+  log: PlcFwLog[];
+};
+
+export type PlcFwStatus = { online: boolean; stale: boolean; uploading: boolean; error: string | null; plc: PlcFwState | null };
+
 const json = (body: unknown) => JSON.stringify(body);
 const q = (reason?: string) => (reason ? `reason=${encodeURIComponent(reason)}` : '');
 const P = (pid: string) => `/api/projects/${pid}`;
@@ -340,4 +410,21 @@ export const api = {
     ),
   alarms: (t: string, active: boolean) => request<AlarmEvent[]>(`/api/journal/alarms?active=${active}`, {}, t),
   ackAlarm: (t: string, id: number) => request<void>(`/api/journal/alarms/${id}/ack`, { method: 'POST' }, t),
+
+  firmware: (t: string) => request<FirmwareFile[]>('/api/firmware', {}, t),
+  uploadFirmware: (t: string, file: File, notes?: string) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    if (notes) fd.append('notes', notes);
+    return request<FirmwareFile>('/api/firmware', { method: 'POST', body: fd }, t);
+  },
+  downloadFirmware: (t: string, f: FirmwareFile) =>
+    downloadFile(`/api/firmware/${f.id}/download`, f.fileName.replace(/\.[^.]*$/, '') + '.bin', t),
+  deleteFirmware: (t: string, id: string, reason?: string) => request<void>(`/api/firmware/${id}?${q(reason)}`, { method: 'DELETE' }, t),
+  sendFirmware: (t: string, id: string, reason?: string) =>
+    request<FirmwareResult>(`/api/firmware/${id}/send?${q(reason)}`, { method: 'POST' }, t),
+  runFirmware: (t: string, type: number, mode: number, reason?: string) =>
+    request<FirmwareResult>(`/api/firmware/run?type=${type}&mode=${mode}&${q(reason)}`, { method: 'POST' }, t),
+  cancelFirmware: (t: string) => request<FirmwareResult>('/api/firmware/cancel', { method: 'POST' }, t),
+  plcFirmware: (t: string, logAfter: number) => request<PlcFwStatus>(`/api/firmware/plc?log=${logAfter}`, {}, t),
 };

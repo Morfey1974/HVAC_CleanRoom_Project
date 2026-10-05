@@ -7,6 +7,7 @@ import { formatDateTime } from '../../lib/localized';
 import { languages } from '../../i18n';
 import { BidiText, bidiAutoInput } from '../../components/BidiText';
 import { AuditTable } from '../../components/AuditTable';
+import { FirmwareTab } from './FirmwareTab';
 
 export function SettingsPage() {
   const { t } = useTranslation();
@@ -15,6 +16,7 @@ export function SettingsPage() {
     { k: 'general', show: hasRole('Viewer') },
     { k: 'users', show: hasRole('Admin') },
     { k: 'audit', show: hasRole('Engineer') },
+    { k: 'firmware', show: hasRole('Engineer') },
   ].filter((x) => x.show);
 
   return (
@@ -32,6 +34,7 @@ export function SettingsPage() {
         <Route path="general" element={<GeneralTab />} />
         {hasRole('Admin') && <Route path="users" element={<UsersTab />} />}
         {hasRole('Engineer') && <Route path="audit" element={<AuditTable />} />}
+        {hasRole('Engineer') && <Route path="firmware" element={<FirmwareTab />} />}
       </Routes>
     </div>
   );

@@ -1150,6 +1150,32 @@ label.btn.disabled {
   margin-bottom: 0.75rem;
 }
 
+/* Firmware */
+.fw-page .card h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+}
+
+.fw-page .error-banner,
+.fw-page .warning-banner,
+.fw-page .success-banner {
+  margin-top: 1rem;
+}
+
+.fw-page select {
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+}
+
+.fw-progress {
+  display: block;
+  width: 10rem;
+  height: 0.6rem;
+  accent-color: var(--primary);
+}
+
 /* Library */
 .props-head {
   display: flex;
@@ -1722,9 +1748,102 @@ label.btn.disabled {
   gap: 0.5rem;
   margin: 0;
 }
+.channel-row {
+  display: grid;
+  gap: 0.25rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px dashed var(--border);
+}
+.channel-row:last-child {
+  border-bottom: none;
+}
+.field-hint--warn {
+  color: var(--warning);
+}
 .field-missing select {
   border-color: var(--warning);
   background: var(--warning-bg);
+}
+
+/* Sensor outputs in the library */
+.output-row {
+  display: grid;
+  grid-template-columns: 1.5rem 1.4fr 1fr 0.8fr 0.8fr 0.7fr auto;
+  gap: 0.4rem;
+  align-items: center;
+  margin-bottom: 0.35rem;
+}
+.output-row input,
+.output-row select {
+  min-width: 0;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+}
+.output-row--head {
+  margin-bottom: 0.15rem;
+}
+
+/* Monitoring: link chain and room cards */
+.chain-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.25rem;
+  margin-bottom: 1rem;
+}
+.chain-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.chain-dot {
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+.chain-item--ok .chain-dot {
+  background: var(--success-bright);
+}
+.chain-item--bad {
+  color: var(--error);
+}
+.chain-item--bad .chain-dot {
+  background: var(--error);
+}
+.room-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+}
+.room-card__title {
+  font-weight: 600;
+  font-size: 1.05rem;
+  margin-bottom: 0.5rem;
+}
+.room-value {
+  display: grid;
+  gap: 0.1rem;
+  padding: 0.5rem 0.6rem;
+  margin-top: 0.4rem;
+  border-radius: 8px;
+  background: var(--success-bg);
+}
+.room-value__num {
+  font-size: 1.6rem;
+}
+.room-value--alarm {
+  background: var(--error-bg);
+  color: var(--error);
+}
+.room-value--none {
+  background: var(--surface-2, rgba(127, 127, 127, 0.12));
+}
+.room-value--none .room-value__num {
+  font-size: 1.1rem;
+  color: var(--text-muted);
 }
 .checkbox-group {
   display: flex;

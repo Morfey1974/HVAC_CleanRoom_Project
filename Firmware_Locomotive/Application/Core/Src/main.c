@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "hvac_can.h"
+#include "fwupd/fwupd_app.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -35,7 +36,9 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define LOCO_BOARD_REV    1u
+#define LOCO_FW_VERSION   0x0100u /* major << 8 | minor */
+#define LOCO_APP_START    0x08004000u /* after the 16K bootloader, see linker script */
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -56,6 +59,8 @@ uint32_t node_last_seen[3] = {0, 0, 0};
 uint32_t loco_tx_count = 0;
 uint16_t node_errors[3] = {0, 0, 0};
 uint32_t loco_hw_errors = 0;
+
+FWUPD_APP_HEADER(FWUPD_TYPE_LOCOMOTIVE, LOCO_BOARD_REV, LOCO_FW_VERSION);
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -74,6 +79,22 @@ static void CAN_SendFromMain(FDCAN_HandleTypeDef *hfdcan, FDCAN_TxHeaderTypeDef 
   HAL_FDCAN_AddMessageToTxFifoQ(hfdcan, hdr, data);
   __set_PRIMASK(primask);
 }
+
+/* Firmware update frames go to the Main PLC on CAN2. */
+static void Fwupd_SendToPlc(uint32_t ext_id, const uint8_t data[8])
+{
+  FDCAN_TxHeaderTypeDef h = {0};
+
+  h.Identifier = ext_id;
+  h.IdType = FDCAN_EXTENDED_ID;
+  h.TxFrameType = FDCAN_DATA_FRAME;
+  h.DataLength = FDCAN_DLC_BYTES_8;
+  h.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
+  h.BitRateSwitch = FDCAN_BRS_OFF;
+  h.FDFormat = FDCAN_CLASSIC_CAN;
+  h.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
+  CAN_SendFromMain(&hfdcan2, &h, (uint8_t *)data);
+}
 /* USER CODE END 0 */
 
 /**
@@ -84,7 +105,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
+  SCB->VTOR = LOCO_APP_START;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -135,6 +156,8 @@ int main(void)
   HAL_FDCAN_ConfigGlobalFilter(&hfdcan1, FDCAN_ACCEPT_IN_RX_FIFO0, FDCAN_ACCEPT_IN_RX_FIFO0, FDCAN_REJECT_REMOTE, FDCAN_REJECT_REMOTE);
   HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0);
   HAL_FDCAN_Start(&hfdcan1);
+
+  FwupdApp_Init(Fwupd_SendToPlc, FWUPD_TYPE_LOCOMOTIVE, LOCO_BOARD_REV, LOCO_FW_VERSION);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -172,6 +195,8 @@ int main(void)
 
         CAN_SendFromMain(&hfdcan2, &errHeader, err_data);
     }
+
+    FwupdApp_Poll();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -234,7 +259,12 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
     uint8_t RxData[64];
     if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &RxHeader, RxData) == HAL_OK)
     {
-      if (hfdcan == &hfdcan1 && RxHeader.Identifier == HVAC_CAN_ID_AI_MEAS)
+      if (hfdcan == &hfdcan2 && RxHeader.IdType == FDCAN_EXTENDED_ID)
+      {
+        FwupdApp_OnRx(RxHeader.Identifier, 1u, RxData,
+                      (RxHeader.DataLength == FDCAN_DLC_BYTES_8) ? 8u : 0u);
+      }
+      else if (hfdcan == &hfdcan1 && RxHeader.Identifier == HVAC_CAN_ID_AI_MEAS)
       {
         analog_rx_tick = HAL_GetTick();
 

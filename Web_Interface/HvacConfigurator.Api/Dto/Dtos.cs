@@ -60,21 +60,30 @@ public record ProjectDocumentDto(Guid Id, string Kind, string FileName, string C
 
 public record LibraryPropDto(string Key, string Value, string Unit);
 
+/// <summary>
+/// One measured output of a sensor. Quantity: temperature, humidity, pressure, flow, other;
+/// Signal: one of ModuleRules.SignalModes; Min/Max: value at the signal range ends, in Unit.
+/// </summary>
+public record SensorOutputDto(int No, string Quantity, string Signal, double Min, double Max, string Unit);
+
 public record LibraryItemDto(
     Guid Id, string Category, string Code, LocalizedTextDto Name, string Manufacturer, string Model,
     string Description, IReadOnlyList<LibraryPropDto> Props, int Version, bool IsArchived, DateTime UpdatedAt,
     int UsedInProjects, int? TypeCode = null, string SystemPrefix = "", int? ChannelCount = null, string? Kind = null,
-    ModuleGraphicDto? Graphic = null, IReadOnlyList<string>? ChannelModes = null);
+    ModuleGraphicDto? Graphic = null, IReadOnlyList<string>? ChannelModes = null, IReadOnlyList<SensorOutputDto>? Outputs = null);
 
 /// <summary>ChannelModes: signal types a module channel can be set to (e.g. 0-10V, 4-20mA); empty = no choice.</summary>
 public record LibraryItemSaveRequest(
     string Category, string Code, LocalizedTextDto Name, string? Manufacturer, string? Model,
     string? Description, IReadOnlyList<LibraryPropDto>? Props, string? Reason,
     int? TypeCode = null, string? SystemPrefix = null, int? ChannelCount = null, ModuleGraphicDto? Graphic = null,
-    IReadOnlyList<string>? ChannelModes = null);
+    IReadOnlyList<string>? ChannelModes = null, IReadOnlyList<SensorOutputDto>? Outputs = null);
 
-/// <summary>Setting of one module channel in the project; Mode goes to the module firmware.</summary>
-public record ModuleChannelDto(int Channel, string Mode);
+/// <summary>
+/// Setting of one module channel in the project; Mode goes to the module firmware.
+/// EquipmentId + Output: which project sensor and which of its outputs is wired to the channel.
+/// </summary>
+public record ModuleChannelDto(int Channel, string Mode, Guid? EquipmentId = null, int? Output = null);
 
 /// <summary>Connection point on a module block. X/Y are fractions 0..1 of the block size.</summary>
 public record GraphicPortDto(
@@ -120,5 +129,9 @@ public record ProjectEquipmentDto(
     Guid? LibraryItemId, int LibraryVersion, int? LibraryLatestVersion, LibraryItemDto? Snapshot);
 
 public record ProjectEquipmentSaveRequest(Guid? LibraryItemId, string Tag, int Quantity, Guid? RoomId, string? Notes, string? Reason);
+
+public record FirmwareFileDto(
+    Guid Id, int ModuleType, int BoardRev, int Version, long SizeBytes, string Crc32,
+    string FileName, string Notes, DateTime UploadedAt, string UploadedBy, DateTime? SentToPlcAt);
 
 public record AlarmEventDto(long Id, string Code, string Element, DateTime StartedAt, DateTime? ClearedAt, DateTime? AckAt, string? AckBy);

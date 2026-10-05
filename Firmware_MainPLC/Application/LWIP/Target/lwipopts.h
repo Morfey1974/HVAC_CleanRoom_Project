@@ -135,6 +135,10 @@
 #define SO_REUSE                        1
 #define LWIP_SO_RCVTIMEO                1
 
+/* Thread stacks are in bytes with CMSIS-RTOS2; 1024 is too small for ICMP/TCP processing. */
+#undef TCPIP_THREAD_STACKSIZE
+#define TCPIP_THREAD_STACKSIZE          4096
+
 /* USER CODE END 1 */
 
 #ifdef __cplusplus

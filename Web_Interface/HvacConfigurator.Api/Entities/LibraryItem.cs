@@ -37,6 +37,9 @@ public class LibraryItem
     /// <summary>JSON array of { key, value, unit } — free-form technical properties.</summary>
     public string PropsJson { get; set; } = "[]";
 
+    /// <summary>JSON array of <c>SensorOutputDto</c>: measured outputs of a sensor (quantity, signal, scale); sensors only.</summary>
+    public string OutputsJson { get; set; } = "[]";
+
     /// <summary>JSON <c>ModuleGraphicDto</c>: block look and connection points on the scheme; empty = default drawing.</summary>
     public string GraphicJson { get; set; } = "";
 
