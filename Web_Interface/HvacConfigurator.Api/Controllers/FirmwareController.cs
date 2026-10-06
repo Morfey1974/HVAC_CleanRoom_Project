@@ -25,6 +25,17 @@ public class FirmwareController(FirmwareService firmware, PlcFirmwareClient plc)
         return f is null ? BadRequest(new { message = err }) : Ok(f);
     }
 
+    /// <summary>Module builds in the project folders (development computer only).</summary>
+    [HttpGet("builds")]
+    public async Task<IActionResult> Builds(CancellationToken ct) => Ok(await firmware.BuildsAsync(ct));
+
+    [HttpPost("from-build")]
+    public async Task<IActionResult> FromBuild([FromQuery] int type, CancellationToken ct)
+    {
+        var (f, err) = await firmware.AddFromBuildAsync(type, ct);
+        return f is null ? BadRequest(new { message = err }) : Ok(f);
+    }
+
     [HttpGet("{id:guid}/download")]
     public async Task<IActionResult> Download(Guid id, CancellationToken ct) =>
         await firmware.GetAsync(id, ct) is { } f

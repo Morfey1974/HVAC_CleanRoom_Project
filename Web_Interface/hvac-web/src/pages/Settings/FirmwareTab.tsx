@@ -1,18 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { api, type FirmwareFile, type FirmwareResult, type PlcFwLog, type PlcFwStatus } from '../../api/client';
+import { api, type FirmwareBuild, type FirmwareFile, type FirmwareResult, type PlcFwLog, type PlcFwStatus } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useConfirm } from '../../components/Dialog';
 import { formatDateTime, formatSize } from '../../lib/localized';
 
 const POLL_MS = 1000;
-const LOG_KEEP = 200;
+const LOG_KEEP = 500;
+const LOG_PAGE_SIZES = [10, 20, 50, 100];
+const LOG_SIZE_KEY = 'fw.logPageSize';
+/** Catalogue type (configuration events) -> firmware module type. */
+const CAT_TO_FW: Record<number, number> = { 0x01: 1, 0x10: 2, 0x70: 3, 0x71: 4, 0x20: 5 };
 const MODE_DIFFERENT = 1;
 const MODE_ALL = 2;
 const ROLE_CURRENT = 1;
 const ROLE_NEW = 2;
 const ROLE_BACKUP = 3;
 const EV_CFG_FIRST = 14;
+const EV_CFG_ERROR = 16;
 const EV_ROLLBACK = 18;
 const EV_ID_WALK = 19;
 
@@ -32,12 +37,18 @@ export function FirmwareTab() {
   const { token } = useAuth();
   const confirm = useConfirm();
   const [files, setFiles] = useState<FirmwareFile[]>([]);
+  const [builds, setBuilds] = useState<FirmwareBuild[]>([]);
   const [status, setStatus] = useState<PlcFwStatus | null>(null);
   const [log, setLog] = useState<PlcFwLog[]>([]);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [modes, setModes] = useState<Record<number, number>>({});
+  const [logPage, setLogPage] = useState(0);
+  const [logSize, setLogSize] = useState(() => {
+    const n = Number(localStorage.getItem(LOG_SIZE_KEY));
+    return LOG_PAGE_SIZES.includes(n) ? n : 20;
+  });
   const cursor = useRef({ boot: 0, id: 0 });
 
   const typeName = useCallback((n: number) => t(`firmware.types.${n}`, { defaultValue: `#${n}` }), [t]);
@@ -50,7 +61,9 @@ export function FirmwareTab() {
   );
 
   const loadFiles = useCallback(() => {
-    if (token) api.firmware(token).then(setFiles).catch((e: Error) => setError(e.message));
+    if (!token) return;
+    api.firmware(token).then(setFiles).catch((e: Error) => setError(e.message));
+    api.firmwareBuilds(token).then(setBuilds).catch(() => setBuilds([]));
   }, [token]);
   useEffect(loadFiles, [loadFiles]);
 
@@ -105,6 +118,13 @@ export function FirmwareTab() {
       const r = await run('upload', () => api.uploadFirmware(token, f));
       if (!r) break;
     }
+    loadFiles();
+  };
+
+  const fromBuild = async (b: FirmwareBuild) => {
+    if (!token) return;
+    const f = await run(`build:${b.moduleType}`, () => api.firmwareFromBuild(token, b.moduleType));
+    if (f) setInfo(t('firmware.fromBuildDone', { type: typeName(f.moduleType), ver: ver(f.version) }));
     loadFiles();
   };
 
@@ -178,6 +198,10 @@ export function FirmwareTab() {
   const types = [...new Set([...(plc?.slots.map((s) => s.type) ?? []), ...(plc?.nodes.map((n) => n.type) ?? [])])].sort((a, b) => a - b);
   const slotOf = (type: number, role: number) => plc?.slots.find((s) => s.type === type && s.role === role);
   const runActive = !!plc?.run.active;
+  const logPages = Math.max(1, Math.ceil(log.length / logSize));
+  const page = Math.min(logPage, logPages - 1);
+  const logRows = [...log].reverse().slice(page * logSize, (page + 1) * logSize);
+  const logType = (e: PlcFwLog) => (e.ev >= EV_CFG_FIRST && e.ev < EV_ROLLBACK ? (CAT_TO_FW[e.type] ?? e.type) : e.type);
 
   return (
     <div className="fw-page">
@@ -236,6 +260,25 @@ export function FirmwareTab() {
                   </td>
                   <td className="ltr-value">{formatDateTime(f.sentToPlcAt, i18n.language)}</td>
                   <td className="row-actions">
+                    {(() => {
+                      const b = builds.find((x) => x.moduleType === f.moduleType);
+                      if (!b || files.find((x) => x.moduleType === f.moduleType) !== f) return null;
+                      return (
+                        <button
+                          type="button"
+                          className="btn btn-small"
+                          disabled={!!busy || b.loaded}
+                          title={
+                            b.loaded
+                              ? t('firmware.fromBuildLoaded')
+                              : t('firmware.fromBuildHint', { ver: ver(b.version), at: formatDateTime(b.builtAt, i18n.language) })
+                          }
+                          onClick={() => fromBuild(b)}
+                        >
+                          {busy === `build:${b.moduleType}` ? t('common.loading') : t('firmware.fromBuild', { ver: ver(b.version) })}
+                        </button>
+                      );
+                    })()}
                     <button type="button" className="btn btn-small btn-primary" disabled={!!busy || runActive || !status?.online} onClick={() => send(f)}>
                       {busy === `send:${f.id}` ? t('firmware.sending') : t('firmware.send')}
                     </button>
@@ -426,11 +469,11 @@ export function FirmwareTab() {
                     <td colSpan={5} className="muted">{t('firmware.logEmpty')}</td>
                   </tr>
                 )}
-                {[...log].reverse().map((e) => (
+                {logRows.map((e) => (
                   <tr key={e.id}>
                     <td className="ltr-value nowrap">{uptime(e.t)}</td>
                     <td>{t(`firmware.events.${e.ev}`, { defaultValue: `${e.ev}` })}</td>
-                    <td>{e.type ? typeName(e.type) : ''}</td>
+                    <td>{e.type ? typeName(logType(e)) : ''}</td>
                     <td className="ltr-value">{e.tag !== '000000' ? e.tag.toUpperCase() : ''}</td>
                     <td className="ltr-value">
                       {e.ev === 3
@@ -438,7 +481,9 @@ export function FirmwareTab() {
                         : e.ev === EV_ID_WALK
                           ? t('firmware.walkFound', { count: e.from })
                           : e.ev >= EV_CFG_FIRST && e.ev < EV_ROLLBACK
-                            ? ''
+                            ? e.ev === EV_CFG_ERROR && e.err
+                              ? t(`plcConfig.moduleErr.${e.err}`, { defaultValue: `#${e.err}` })
+                              : ''
                             : [
                             !e.from || e.from === e.to ? (e.to ? ver(e.to) : '') : `${ver(e.from)} → ${e.to ? ver(e.to) : ''}`,
                             e.ev === 6 ? t('firmware.resultFail', {
@@ -453,6 +498,39 @@ export function FirmwareTab() {
                 ))}
               </tbody>
             </table>
+          </div>
+          <div className="pager">
+            <button type="button" className="btn btn-small btn-ghost-inline" disabled={page === 0} onClick={() => setLogPage(page - 1)}>
+              ‹
+            </button>
+            <span className="ltr-value">
+              {page + 1} / {logPages}
+            </span>
+            <button
+              type="button"
+              className="btn btn-small btn-ghost-inline"
+              disabled={page + 1 >= logPages}
+              onClick={() => setLogPage(page + 1)}
+            >
+              ›
+            </button>
+            <select
+              value={logSize}
+              aria-label={t('firmware.logPerPage')}
+              title={t('firmware.logPerPage')}
+              onChange={(e) => {
+                const n = Number(e.target.value);
+                setLogSize(n);
+                setLogPage(0);
+                localStorage.setItem(LOG_SIZE_KEY, String(n));
+              }}
+            >
+              {LOG_PAGE_SIZES.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
           </div>
           <p className="field-hint">{t('firmware.logHint')}</p>
         </div>

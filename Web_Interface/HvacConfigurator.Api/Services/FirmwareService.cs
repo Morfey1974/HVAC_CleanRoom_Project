@@ -35,7 +35,39 @@ public class FirmwareService(AppDbContext db, AuditService audit, PlcFirmwareCli
         await file.CopyToAsync(ms, ct);
         var r = FirmwareImage.Parse(ms.ToArray());
         if (r.Error is not null) return (null, r.Error);
+        return (await AddAsync(r, file.FileName, notes, "firmware.upload", ct), null);
+    }
 
+    /// <summary>Latest build of every module type found in the firmware project folders on this computer.</summary>
+    public async Task<List<FirmwareBuildDto>> BuildsAsync(CancellationToken ct)
+    {
+        var known = await db.FirmwareFiles.AsNoTracking().Select(f => new { f.ModuleType, f.Crc32 }).ToListAsync(ct);
+        var list = new List<FirmwareBuildDto>();
+        foreach (var (type, path) in FirmwareBuilds.Find())
+        {
+            var r = FirmwareImage.Parse(await File.ReadAllBytesAsync(path, ct));
+            if (r.Error is not null || r.Header!.ModuleType != type) continue;
+            var crc = FirmwareImage.Crc32(r.Data);
+            list.Add(new FirmwareBuildDto(type, r.Header.BoardRev, r.Header.Version, r.Data!.Length, Path.GetFileName(path),
+                File.GetLastWriteTimeUtc(path), known.Any(k => k.ModuleType == type && (uint)k.Crc32 == crc)));
+        }
+        return list;
+    }
+
+    /// <summary>Adds the latest build of the type; error no_build, bad_build or already_loaded.</summary>
+    public async Task<(FirmwareFileDto? File, string? Error)> AddFromBuildAsync(int moduleType, CancellationToken ct)
+    {
+        var path = FirmwareBuilds.Find().Where(b => b.Type == moduleType).Select(b => b.Path).FirstOrDefault();
+        if (path is null) return (null, "no_build");
+        var r = FirmwareImage.Parse(await File.ReadAllBytesAsync(path, ct));
+        if (r.Error is not null || r.Header!.ModuleType != moduleType) return (null, "bad_build");
+        long crc = FirmwareImage.Crc32(r.Data);
+        if (await db.FirmwareFiles.AnyAsync(f => f.ModuleType == moduleType && f.Crc32 == crc, ct)) return (null, "already_loaded");
+        return (await AddAsync(r, path, "", "firmware.from_build", ct), null);
+    }
+
+    private async Task<FirmwareFileDto> AddAsync(FirmwareParseResult r, string fileName, string? notes, string action, CancellationToken ct)
+    {
         var f = new FirmwareFile
         {
             ModuleType = r.Header!.ModuleType,
@@ -43,15 +75,15 @@ public class FirmwareService(AppDbContext db, AuditService audit, PlcFirmwareCli
             Version = r.Header.Version,
             SizeBytes = r.Data!.Length,
             Crc32 = FirmwareImage.Crc32(r.Data),
-            FileName = Path.GetFileName(file.FileName),
+            FileName = Path.GetFileName(fileName),
             Notes = (notes ?? "").Trim(),
             UploadedBy = audit.CurrentLogin,
             Data = r.Data,
         };
         db.FirmwareFiles.Add(f);
-        audit.Add("firmware.upload", f.FileName, newValue: Describe(f));
+        audit.Add(action, f.FileName, newValue: Describe(f));
         await db.SaveChangesAsync(ct);
-        return (ToDto(f), null);
+        return ToDto(f);
     }
 
     public Task<FirmwareFile?> GetAsync(Guid id, CancellationToken ct) =>

@@ -11,6 +11,9 @@
  *   POST /api/id/walk                   identification walk (plc_id)
  *   POST /api/cfg?size=N&crc=HEX        body = configuration file (hvac_cfg.h) -> stored and applied
  *   GET  /api/cfg/status                configuration, module check
+ *   GET  /api/can3                      CAN3 state, doors master, last received frames
+ *   POST /api/can3/send?id=HEX&data=HEX standard frame on CAN3 (bench check)
+ *   POST /api/doors/cmd?cmd=N&mask=HEX  command to the doors master (HVAC_DM_CMD_*)
  */
 #include "plc_web.h"
 
@@ -131,6 +134,39 @@ static uint32_t Query_U32(const char *q, const char *key, int base, uint32_t def
   return def;
 }
 
+/* Query parameter as hex bytes ("0a1b.."); returns the byte count, 0xFF if malformed. */
+static uint8_t Query_Hex(const char *q, const char *key, uint8_t *out, uint8_t max)
+{
+  size_t kl = strlen(key);
+  const char *p = q;
+
+  while (p != NULL && *p != '\0')
+  {
+    if (strncmp(p, key, kl) == 0 && p[kl] == '=')
+    {
+      uint8_t n = 0u;
+
+      p += kl + 1u;
+      while (*p != '\0' && *p != '&')
+      {
+        char hx[3] = {p[0], p[1], '\0'};
+        char *end;
+        unsigned long v;
+
+        if (n >= max || p[1] == '\0' || p[1] == '&') return 0xFFu;
+        v = strtoul(hx, &end, 16);
+        if (*end != '\0') return 0xFFu;
+        out[n++] = (uint8_t)v;
+        p += 2;
+      }
+      return n;
+    }
+    p = strchr(p, '&');
+    if (p != NULL) p++;
+  }
+  return 0u;
+}
+
 static uint8_t Req_Parse(WebReq *r)
 {
   char *sp1 = strchr(s_hdr, ' ');
@@ -184,11 +220,75 @@ static void PlcWeb_SendAi(struct netconn *c)
   s_json_len = 0u;
   Json_Add("{\"t\":%s,\"h\":%s,\"st\":%u,\"cnt\":%u,\"link\":%u,\"init\":%u,"
            "\"age\":%lu,\"rx_loco\":%lu,\"tx_hub\":%lu,\"tx_err\":%lu,"
-           "\"rx_hub\":%lu,\"drop\":%lu,\"boff1\":%u,\"boff2\":%u}",
+           "\"rx_hub\":%lu,\"drop\":%lu,\"boff1\":%u,\"boff2\":%u,\"dsrc\":%u}",
            t, h, s.meas.status, s.meas.counter, s.loco_link, s.init_ok,
            (unsigned long)s.age_ms, (unsigned long)s.rx_loco, (unsigned long)s.tx_hub,
            (unsigned long)s.tx_hub_err, (unsigned long)s.rx_hub, (unsigned long)s.rx_drop,
-           s.loco_bus_off, s.hub_bus_off);
+           s.loco_bus_off, s.hub_bus_off, s.doors_src);
+  Json_Send(c);
+}
+
+/* ---------- CAN3 / doors master ---------- */
+
+static void PlcWeb_FwResult(struct netconn *c, uint8_t err);
+
+static long Age_Json(uint32_t ms)
+{
+  return (ms == 0xFFFFFFFFu) ? -1L : (long)ms;
+}
+
+static void PlcWeb_Can3(struct netconn *c)
+{
+  static PlcCan3Frame fr[PLC_CAN3_LOG_LEN];
+  PlcCan3Snapshot s;
+  PlcAiSnapshot a;
+  uint8_t n = PlcCan_GetCan3(&s, fr, PLC_CAN3_LOG_LEN);
+  const char *sep = "";
+
+  PlcCan_GetSnapshot(&a);
+  s_json_len = 0u;
+  Json_Add("{\"ok\":%u,\"boff\":%u,\"passive\":%u,\"tec\":%u,\"rec\":%u,\"rx\":%lu,\"rxExt\":%lu,"
+           "\"tx\":%lu,\"txErr\":%lu,\"doorsSrc\":%u,",
+           s.ok, s.bus_off, s.err_passive, s.tec, s.rec, (unsigned long)s.rx, (unsigned long)s.rx_ext,
+           (unsigned long)s.tx, (unsigned long)s.tx_err, a.doors_src);
+  Json_Add("\"dm\":{\"link\":%u,\"closed\":%u,\"locked\":%u,\"fault\":%u,\"st\":%u,\"cnt\":%u,\"doors\":%u,"
+           "\"ver\":%u,\"age\":%ld,\"rx\":%lu,\"txPlc\":%lu,\"cmdSeq\":%u,\"cmd\":%u,",
+           s.dm.link, s.dm.closed, s.dm.locked, s.dm.fault, s.dm.status, s.dm.counter, s.dm.doors,
+           s.dm.version, Age_Json(s.dm.age_ms), (unsigned long)s.dm.rx_state, (unsigned long)s.dm.tx_plc,
+           s.dm.cmd_seq, s.dm.cmd_code);
+  Json_Add("\"ack\":{\"valid\":%u,\"seq\":%u,\"cmd\":%u,\"res\":%u,\"age\":%ld}},\"frames\":[",
+           s.dm.ack_valid, s.dm.ack_seq, s.dm.ack_cmd, s.dm.ack_res, Age_Json(s.dm.ack_age_ms));
+  for (uint8_t i = 0u; i < n; i++)
+  {
+    Json_Add("%s{\"age\":%lu,\"id\":%u,\"d\":\"", sep, (unsigned long)fr[i].age_ms, fr[i].id);
+    for (uint8_t k = 0u; k < fr[i].dlc; k++) Json_Add("%02x", fr[i].d[k]);
+    Json_Add("\"}");
+    sep = ",";
+  }
+  Json_Add("]}");
+  Json_Send(c);
+}
+
+static void PlcWeb_Can3Send(struct netconn *c, const WebReq *r)
+{
+  uint8_t d[8];
+  uint32_t id = Query_U32(r->query, "id", 16, 0xFFFFFFFFu);
+  uint8_t n = Query_Hex(r->query, "data", d, sizeof(d));
+
+  if (id > 0x7FFu || n == 0xFFu) { PlcWeb_FwResult(c, 1u); return; }
+  PlcWeb_FwResult(c, PlcCan_SendCan3Raw((uint16_t)id, n, d) ? 0u : 2u);
+}
+
+static void PlcWeb_DoorsCmd(struct netconn *c, const WebReq *r)
+{
+  uint32_t cmd = Query_U32(r->query, "cmd", 10, 0xFFFFFFFFu);
+  uint8_t mask = (uint8_t)Query_U32(r->query, "mask", 16, 0xFFu);
+  uint8_t seq = 0u;
+
+  s_json_len = 0u;
+  if (cmd > 0xFFu)                                   Json_Add("{\"ok\":false,\"err\":1}");
+  else if (!PlcCan_DoorsCmd((uint8_t)cmd, mask, &seq)) Json_Add("{\"ok\":false,\"err\":2}");
+  else                                               Json_Add("{\"ok\":true,\"seq\":%u}", seq);
   Json_Send(c);
 }
 
@@ -499,6 +599,18 @@ static void PlcWeb_Serve(struct netconn *c)
   else if (strcmp(r.method, "GET") == 0 && strcmp(r.path, "/api/ai") == 0)
   {
     PlcWeb_SendAi(c);
+  }
+  else if (strcmp(r.method, "GET") == 0 && strcmp(r.path, "/api/can3") == 0)
+  {
+    PlcWeb_Can3(c);
+  }
+  else if (strcmp(r.method, "POST") == 0 && strcmp(r.path, "/api/can3/send") == 0)
+  {
+    PlcWeb_Can3Send(c, &r);
+  }
+  else if (strcmp(r.method, "POST") == 0 && strcmp(r.path, "/api/doors/cmd") == 0)
+  {
+    PlcWeb_DoorsCmd(c, &r);
   }
   else if (strcmp(r.method, "GET") == 0 && strcmp(r.path, "/") == 0)
   {

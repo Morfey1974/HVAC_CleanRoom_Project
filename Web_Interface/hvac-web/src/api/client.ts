@@ -279,7 +279,52 @@ export type FirmwareFile = {
   sentToPlcAt: string | null;
 };
 
+/** Module build in the project folders of this computer; loaded = the same image is already in the list. */
+export type FirmwareBuild = {
+  moduleType: number;
+  boardRev: number;
+  version: number;
+  sizeBytes: number;
+  fileName: string;
+  builtAt: string;
+  loaded: boolean;
+};
+
 export type FirmwareResult = { ok: boolean; error: string | null; plcError: number | null };
+
+/** PLC CAN3 (/api/can3 on the PLC); age -1 = never. Doors master frames: Shared_Libs/hvac_can.h DM_*. */
+export type Can3Frame = { age: number; id: number; d: string };
+export type Can3Plc = {
+  ok: number;
+  boff: number;
+  passive: number;
+  tec: number;
+  rec: number;
+  rx: number;
+  rxExt: number;
+  tx: number;
+  txErr: number;
+  doorsSrc: number;
+  dm: {
+    link: number;
+    closed: number;
+    locked: number;
+    fault: number;
+    st: number;
+    cnt: number;
+    doors: number;
+    ver: number;
+    age: number;
+    rx: number;
+    txPlc: number;
+    cmdSeq: number;
+    cmd: number;
+    ack: { valid: number; seq: number; cmd: number; res: number; age: number };
+  };
+  frames: Can3Frame[];
+};
+export type Can3Status = { online: boolean; stale: boolean; error: string | null; plc: Can3Plc | null };
+export type Can3Result = { ok: boolean; err?: number; error?: string; seq?: number };
 
 export type PlcConfigModule = { index: number; moduleId: string; systemName: string; id: string; type: number; channels: number };
 export type PlcConfigIssue = { code: string; module: string | null; channel: number | null; blocking: boolean };
@@ -482,6 +527,9 @@ export const api = {
     if (notes) fd.append('notes', notes);
     return request<FirmwareFile>('/api/firmware', { method: 'POST', body: fd }, t);
   },
+  firmwareBuilds: (t: string) => request<FirmwareBuild[]>('/api/firmware/builds', {}, t),
+  firmwareFromBuild: (t: string, type: number) =>
+    request<FirmwareFile>(`/api/firmware/from-build?type=${type}`, { method: 'POST' }, t),
   downloadFirmware: (t: string, f: FirmwareFile) =>
     downloadFile(`/api/firmware/${f.id}/download`, f.fileName.replace(/\.[^.]*$/, '') + '.bin', t),
   deleteFirmware: (t: string, id: string, reason?: string) => request<void>(`/api/firmware/${id}?${q(reason)}`, { method: 'DELETE' }, t),
@@ -494,6 +542,11 @@ export const api = {
     request<FirmwareResult>(`/api/firmware/rollback?type=${type}&${q(reason)}`, { method: 'POST' }, t),
   idWalk: (t: string) => request<FirmwareResult>('/api/firmware/id-walk', { method: 'POST' }, t),
   plcFirmware: (t: string, logAfter: number) => request<PlcFwStatus>(`/api/firmware/plc?log=${logAfter}`, {}, t),
+  can3: (t: string) => request<Can3Status>('/api/can3', {}, t),
+  can3Send: (t: string, id: number, data: string) =>
+    request<Can3Result>(`/api/can3/send?id=${id}&data=${encodeURIComponent(data)}`, { method: 'POST' }, t),
+  doorsCmd: (t: string, cmd: number, mask: number) =>
+    request<Can3Result>(`/api/can3/doors-cmd?cmd=${cmd}&mask=${mask}`, { method: 'POST' }, t),
 
   plcConfig: (t: string, pid: string) => request<PlcConfigView>(`${P(pid)}/plc-config`, {}, t),
   uploadPlcConfig: (t: string, pid: string, reason?: string) =>

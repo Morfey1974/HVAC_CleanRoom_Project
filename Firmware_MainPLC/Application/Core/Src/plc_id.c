@@ -21,7 +21,7 @@
 #define ID_ASSIGN_TRIES     2u
 #define ID_MAX_HEADS        30u
 #define ID_MAX_PLACES       31u
-#define ID_LINES            2u
+#define ID_LINES            3u
 
 typedef struct
 {
@@ -53,8 +53,9 @@ static void Id_LineOut(uint8_t line, uint8_t on)
 {
   GPIO_PinState s = on ? GPIO_PIN_SET : GPIO_PIN_RESET;
 
-  if (line == 1u) HAL_GPIO_WritePin(MCU_MODUL_ID_OUT_AI_GPIO_Port, MCU_MODUL_ID_OUT_AI_Pin, s);
-  else            HAL_GPIO_WritePin(MCU_MODUL_ID_OUT_DISPLAY_GPIO_Port, MCU_MODUL_ID_OUT_DISPLAY_Pin, s);
+  if (line == 1u)      HAL_GPIO_WritePin(MCU_MODUL_ID_OUT_AI_GPIO_Port, MCU_MODUL_ID_OUT_AI_Pin, s);
+  else if (line == 2u) HAL_GPIO_WritePin(MCU_MODUL_ID_OUT_DISPLAY_GPIO_Port, MCU_MODUL_ID_OUT_DISPLAY_Pin, s);
+  else                 HAL_GPIO_WritePin(MODUL_ID_OUT_BUS_GPIO_Port, MODUL_ID_OUT_BUS_Pin, s);
 }
 
 static void Id_Cmd(uint8_t bus, const uint8_t d[8])
@@ -71,8 +72,7 @@ static void Id_CmdAll(uint8_t cmd)
   uint8_t d[8] = {0};
 
   d[0] = cmd;
-  Id_Cmd(PLC_CAN_BUS_LOCO, d);
-  Id_Cmd(PLC_CAN_BUS_HUB, d);
+  for (uint8_t bus = 1u; bus <= PLC_CAN_BUSES; bus++) Id_Cmd(bus, d);
 }
 
 static void Id_Flush(void)
@@ -197,14 +197,13 @@ static void Id_Walk(void)
   s_found_n = 0u;
   taskEXIT_CRITICAL();
 
-  Id_LineOut(1u, 0u);
-  Id_LineOut(2u, 0u);
+  for (uint8_t line = 1u; line <= ID_LINES; line++) Id_LineOut(line, 0u);
   Id_CmdAll(HVAC_ID_CMD_RESET);
   osDelay(ID_OUT_SETTLE_MS);
 
   for (uint8_t line = 1u; line <= ID_LINES; line++)
   {
-    uint8_t bus = (line == 1u) ? PLC_CAN_BUS_LOCO : PLC_CAN_BUS_HUB;
+    uint8_t bus = PlcCan_LineBus(line);
     uint8_t here[8];
 
     Id_LineOut(line, 1u);
@@ -263,7 +262,7 @@ static void Id_OnUnassigned(const IdFrame *f)
     e.tag = tag;
     e.cat = f->d[3];
     e.board = f->d[7];
-    e.line = (f->bus == PLC_CAN_BUS_HUB) ? 2u : 1u;
+    e.line = f->bus;
     e.rail = HVAC_ID_NONE;
     e.place = HVAC_ID_NONE;
     taskENTER_CRITICAL();

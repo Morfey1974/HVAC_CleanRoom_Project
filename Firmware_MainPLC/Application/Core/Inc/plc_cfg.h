@@ -20,7 +20,7 @@
 #include "hvac_cfg.h"
 #include "plc_id.h"
 
-#define PLC_FW_VERSION          0x0103u /* major << 8 | minor */
+#define PLC_FW_VERSION          0x0104u /* major << 8 | minor */
 
 #define PLC_CFG_MAX_EXTRA       16u
 

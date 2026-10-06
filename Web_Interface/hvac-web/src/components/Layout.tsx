@@ -8,6 +8,7 @@ import { pickName } from '../lib/localized';
 import { AlarmBell } from './AlarmBell';
 import { BidiText } from './BidiText';
 import type { Role } from '../api/client';
+import logoDcm from '../assets/logo-dcm.png';
 
 type NavItem = { to: string; key: string; minRole: Role };
 
@@ -131,9 +132,18 @@ function Shell({ inProject }: { inProject: boolean }) {
   return (
     <div className="app-shell">
       <header className="app-header">
+        <div className="header-left">
+          <div className="header-logo">
+            <img src={logoDcm} alt={t('header.logoAlt')} className="header-logo__image" />
+            <div className="header-logo__text">
+              <span className="header-logo__name">DCM</span>
+              <span className="header-logo__subtitle">{t('header.logoSubtitle')}</span>
+            </div>
+          </div>
+        </div>
         <div className="header-brand">{t('appTitle')}</div>
-        <PlcStatus />
         <div className="header-actions">
+          <PlcStatus />
           <AlarmBell />
           <select
             className="lang-select"

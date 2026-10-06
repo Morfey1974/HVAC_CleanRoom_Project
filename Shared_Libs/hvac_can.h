@@ -86,4 +86,60 @@ static inline void hvac_can_ai_decode(const uint8_t d[8], HvacAiMeas *m)
 #define HVAC_DOORS_PERIOD_MS      500u
 #define HVAC_DOORS_TIMEOUT_MS     3000u /* display: no doors frame this long -> no link */
 
+/* Doors master (DCM door controller with a CAN port) <-> Main PLC, on PLC CAN3. DLC 8 for all.
+ * While DM_STATE frames arrive, the PLC takes the doors state from them instead of Modbus.
+ *
+ * HVAC_CAN_ID_DM_STATE, master -> PLC, every HVAC_DM_PERIOD_MS and at once on a change:
+ *   [0] closed mask, bit N = door N+1, 1 = closed (bits 0..4 go to the displays, see HVAC_CAN_ID_DOORS)
+ *   [1] locked mask, 1 = lock engaged
+ *   [2] fault mask,  1 = door fault (sensor, drive)
+ *   [3] status, HVAC_DM_ST_*
+ *   [4] frame counter, incremented by the master
+ *   [5] number of doors served, 1..8
+ *   [6..7] master firmware version, little-endian, 0xMMmm
+ *
+ * HVAC_CAN_ID_DM_CMD, PLC -> master:
+ *   [0] command, HVAC_DM_CMD_*
+ *   [1] door mask the command applies to, 0xFF = all
+ *   [2] sequence number, copied into the answer
+ *   [3..7] reserved, 0
+ *
+ * HVAC_CAN_ID_DM_ACK, master -> PLC, answer to every DM_CMD:
+ *   [0] sequence number of the command
+ *   [1] command
+ *   [2] result, HVAC_DM_RES_*
+ *   [3..7] reserved, 0
+ *
+ * HVAC_CAN_ID_DM_PLC, PLC -> master, every HVAC_DM_PLC_PERIOD_MS:
+ *   [0] frame counter, incremented by the PLC
+ *   [1] PLC flags, HVAC_DM_PLC_*
+ *   [2..3] PLC firmware version, little-endian
+ *   [4..7] reserved, 0
+ */
+#define HVAC_CAN_ID_DM_STATE      0x320u
+#define HVAC_CAN_ID_DM_CMD        0x321u
+#define HVAC_CAN_ID_DM_ACK        0x322u
+#define HVAC_CAN_ID_DM_PLC        0x323u
+
+#define HVAC_DM_ST_LOCAL          0x01u /* master in local (manual) mode, PLC commands are refused */
+#define HVAC_DM_ST_ALARM          0x02u /* door open too long or emergency release */
+#define HVAC_DM_ST_INTERLOCK      0x04u /* a door is open, the others are held */
+
+#define HVAC_DM_CMD_PING          0x00u /* link test: the master only answers */
+#define HVAC_DM_CMD_LOCK          0x01u
+#define HVAC_DM_CMD_UNLOCK        0x02u
+#define HVAC_DM_CMD_OPEN          0x03u /* open the doors of the mask once */
+#define HVAC_DM_CMD_ALARM_RESET   0x04u
+
+#define HVAC_DM_RES_OK            0x00u
+#define HVAC_DM_RES_BUSY          0x01u
+#define HVAC_DM_RES_REFUSED       0x02u /* local mode or interlock */
+#define HVAC_DM_RES_UNKNOWN       0x03u /* command not supported */
+
+#define HVAC_DM_PLC_CFG_OK        0x01u /* PLC has a valid configuration */
+
+#define HVAC_DM_PERIOD_MS         500u
+#define HVAC_DM_TIMEOUT_MS        2000u /* PLC: no DM_STATE this long -> back to Modbus */
+#define HVAC_DM_PLC_PERIOD_MS     1000u
+
 #endif /* HVAC_CAN_H */

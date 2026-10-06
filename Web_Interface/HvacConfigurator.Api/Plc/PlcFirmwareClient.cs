@@ -89,6 +89,22 @@ public class PlcFirmwareClient(IServiceScopeFactory scopes)
     /// <summary>Starts a new module identification walk on the PLC.</summary>
     public Task<string> IdWalkAsync(CancellationToken ct) => CommandAsync("/api/id/walk", ct);
 
+    /// <summary>CAN3 state, doors master and last received frames (/api/can3). Null when the PLC is busy.</summary>
+    public async Task<string?> GetCan3Async(CancellationToken ct)
+    {
+        if (!await _gate.WaitAsync(TimeSpan.FromSeconds(1), ct)) return null;
+        try { return await SendAsync(HttpMethod.Get, "/api/can3", null, ShortTimeout, ct); }
+        finally { _gate.Release(); }
+    }
+
+    /// <summary>Standard frame on CAN3; data = hex bytes. {ok | err}.</summary>
+    public Task<string> Can3SendAsync(int id, string data, CancellationToken ct) =>
+        CommandAsync($"/api/can3/send?id={id:x}&data={data}", ct);
+
+    /// <summary>Command to the doors master (HVAC_DM_CMD_*). {ok, seq | err}.</summary>
+    public Task<string> DoorsCmdAsync(int cmd, int mask, CancellationToken ct) =>
+        CommandAsync($"/api/doors/cmd?cmd={cmd}&mask={mask:x}", ct);
+
     private async Task<string> CommandAsync(string path, CancellationToken ct)
     {
         if (!await _gate.WaitAsync(ShortTimeout, ct)) throw new PlcUnavailableException("plc_busy");

@@ -134,4 +134,7 @@ public record FirmwareFileDto(
     Guid Id, int ModuleType, int BoardRev, int Version, long SizeBytes, string Crc32,
     string FileName, string Notes, DateTime UploadedAt, string UploadedBy, DateTime? SentToPlcAt);
 
+/// <summary>Module firmware build found in the project folders; Loaded = the same image is already in the list.</summary>
+public record FirmwareBuildDto(int ModuleType, int BoardRev, int Version, long SizeBytes, string FileName, DateTime BuiltAt, bool Loaded);
+
 public record AlarmEventDto(long Id, string Code, string Element, DateTime StartedAt, DateTime? ClearedAt, DateTime? AckAt, string? AckBy);

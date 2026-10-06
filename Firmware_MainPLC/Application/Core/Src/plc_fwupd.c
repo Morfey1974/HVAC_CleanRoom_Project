@@ -128,7 +128,7 @@ static uint8_t Fw_SendBus(uint8_t bus, uint32_t id, const uint8_t d[8])
 
 static int Fw_NodeIndex(uint32_t tag, uint8_t create);
 
-/* To one node: on the bus it announced on. To all nodes: on both buses. */
+/* To one node: on the bus it announced on. To all nodes: on every bus. */
 static uint8_t Fw_Send(uint32_t type, uint32_t tag, const uint8_t d[8])
 {
   int i;
@@ -136,12 +136,13 @@ static uint8_t Fw_Send(uint32_t type, uint32_t tag, const uint8_t d[8])
   if (HAL_FDCAN_GetState(PLC_FWUPD_CAN) != HAL_FDCAN_STATE_BUSY) return 0u;
   if (tag == FWUPD_NODE_ALL)
   {
-    uint8_t ok = Fw_SendBus(PLC_CAN_BUS_LOCO, FWUPD_ID(type, tag), d);
-    return (uint8_t)(Fw_SendBus(PLC_CAN_BUS_HUB, FWUPD_ID(type, tag), d) | ok);
+    uint8_t ok = 0u;
+
+    for (uint8_t bus = 1u; bus <= PLC_CAN_BUSES; bus++) ok |= Fw_SendBus(bus, FWUPD_ID(type, tag), d);
+    return ok;
   }
   i = Fw_NodeIndex(tag, 0u);
-  return Fw_SendBus((i >= 0 && g_plc_fwupd.nodes[i].bus == PLC_CAN_BUS_HUB) ? PLC_CAN_BUS_HUB : PLC_CAN_BUS_LOCO,
-                    FWUPD_ID(type, tag), d);
+  return Fw_SendBus((i >= 0) ? PlcCan_LineBus(g_plc_fwupd.nodes[i].bus) : PLC_CAN_BUS_LOCO, FWUPD_ID(type, tag), d);
 }
 
 /* ---------- node table ---------- */

@@ -312,7 +312,7 @@ static void Cfg_SendAiChannel(uint16_t mod_idx, const HvacCfgModule *m, const Hv
     }
   }
   d[2] = (uint8_t)((ch << 4) | (sig & 0x0Fu));
-  (void)PlcCan_Send(PLC_CAN_BUS_LOCO, HVAC_CAN_ID_CFG_SET, 0u, d);
+  (void)PlcCan_Send(PlcCan_LineBus(m->line), HVAC_CAN_ID_CFG_SET, 0u, d);
 }
 
 /* AI found at its place: channel settings until the module confirms this generation. */
@@ -636,6 +636,7 @@ void PlcCfg_Poll(void)
     taskEXIT_CRITICAL();
     if (s_act_len == 0u) memset(d, 0, sizeof(d));
     (void)PlcCan_Send(PLC_CAN_BUS_HUB, HVAC_CAN_ID_CHAIN, 0u, d);
+    (void)PlcCan_Send(PLC_CAN_BUS_BUS, HVAC_CAN_ID_CHAIN, 0u, d);
   }
 
   if (!s_loaded)
