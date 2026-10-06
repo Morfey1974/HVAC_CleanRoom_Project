@@ -291,8 +291,26 @@ export type PlcConfigBuilt = {
   channelCount: number;
   issues: PlcConfigIssue[];
 };
-/** Module of the configuration the PLC runs: st = 0 not checked, 1 ok, 2 missing, 3 error, 4 applying, 5 on the bus. */
-export type PlcCfgMod = { type: number; l: number; r: number; p: number; st: number; err: number; ok: number; bad: number; ver: number };
+/**
+ * Module of the configuration the PLC runs: st = 0 not checked, 1 ok, 2 missing, 3 error, 4 applying, 5 on the bus,
+ * 6 another type at this place. fc / tag: type and board tag of the module found there (0 / "000000" = none).
+ */
+export type PlcCfgMod = {
+  type: number;
+  l: number;
+  r: number;
+  p: number;
+  st: number;
+  err: number;
+  ok: number;
+  bad: number;
+  ver: number;
+  fc?: number;
+  tag?: string;
+};
+/** Module found by the identification walk; r = 255 means outside the chain (no place). */
+export type PlcIdModule = { type: number; l: number; r: number; p: number; tag: string; board?: number };
+export type PlcIdWalk = { busy: number; walks: number; count: number; stray: number; age: number };
 export type PlcCfgStatus = {
   up: number;
   flash: number;
@@ -309,8 +327,13 @@ export type PlcCfgStatus = {
   resends: number;
   extraLoco: number;
   extraAi: number;
+  problems?: number;
   plcVer: number;
+  walk?: PlcIdWalk;
   mods: PlcCfgMod[];
+  /** Found but not in the configuration, or outside the chain. */
+  extra?: PlcIdModule[];
+  found?: PlcIdModule[];
 };
 export type PlcConfigView = {
   built: PlcConfigBuilt;
@@ -350,7 +373,7 @@ export type PlcFwState = {
   store: number;
   jedec: string;
   upload: number;
-  run: { active: number; type: number; mode: number; ver: number; done: number; failed: number };
+  run: { active: number; type: number; mode: number; ver: number; done: number; failed: number; rollback?: number };
   busy: number;
   busyTag: string;
   step: number;
@@ -467,6 +490,9 @@ export const api = {
   runFirmware: (t: string, type: number, mode: number, reason?: string) =>
     request<FirmwareResult>(`/api/firmware/run?type=${type}&mode=${mode}&${q(reason)}`, { method: 'POST' }, t),
   cancelFirmware: (t: string) => request<FirmwareResult>('/api/firmware/cancel', { method: 'POST' }, t),
+  rollbackFirmware: (t: string, type: number, reason?: string) =>
+    request<FirmwareResult>(`/api/firmware/rollback?type=${type}&${q(reason)}`, { method: 'POST' }, t),
+  idWalk: (t: string) => request<FirmwareResult>('/api/firmware/id-walk', { method: 'POST' }, t),
   plcFirmware: (t: string, logAfter: number) => request<PlcFwStatus>(`/api/firmware/plc?log=${logAfter}`, {}, t),
 
   plcConfig: (t: string, pid: string) => request<PlcConfigView>(`${P(pid)}/plc-config`, {}, t),

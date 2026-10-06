@@ -27,6 +27,7 @@
 #include <string.h>
 #include "hvac_can.h"
 #include "hvac_cfg.h"
+#include "hvac_id.h"
 #include "fwupd/fwupd_app.h"
 /* USER CODE END Includes */
 
@@ -38,7 +39,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define LOCO_BOARD_REV    1u
-#define LOCO_FW_VERSION   0x0101u /* major << 8 | minor */
+#define LOCO_FW_VERSION   0x0103u /* major << 8 | minor */
 #define LOCO_APP_START    0x08004000u /* after the 16K bootloader, see linker script */
 /* USER CODE END PD */
 
@@ -97,13 +98,52 @@ static void Fwupd_SendToPlc(uint32_t ext_id, const uint8_t data[8])
   CAN_SendFromMain(&hfdcan2, &h, (uint8_t *)data);
 }
 
-/* From the RX interrupt: passes a standard 8-byte frame unchanged to the other bus. */
-static void CAN_Forward(FDCAN_HandleTypeDef *to, uint32_t id, const uint8_t *data)
+/* Identification answers go to the Main PLC on CAN2. */
+static void Id_SendToPlc(uint32_t std_id, const uint8_t data[8])
+{
+  FDCAN_TxHeaderTypeDef h = {0};
+
+  h.Identifier = std_id;
+  h.IdType = FDCAN_STANDARD_ID;
+  h.TxFrameType = FDCAN_DATA_FRAME;
+  h.DataLength = FDCAN_DLC_BYTES_8;
+  h.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
+  h.BitRateSwitch = FDCAN_BRS_OFF;
+  h.FDFormat = FDCAN_CLASSIC_CAN;
+  h.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
+  CAN_SendFromMain(&hfdcan2, &h, (uint8_t *)data);
+}
+
+/* Optocoupler input with pull-up: line raised -> pin low. */
+static uint8_t Id_InputActive(void)
+{
+  return (HAL_GPIO_ReadPin(MODUL_ID_IN_GPIO_Port, MODUL_ID_IN_Pin) == GPIO_PIN_RESET) ? 1u : 0u;
+}
+
+/* CHAIN = next locomotive on the cable, RAIL = first module of this rail. */
+static void Id_SetOutput(uint8_t out)
+{
+  HAL_GPIO_WritePin(MODUL_ID_OUT_GPIO_Port, MODUL_ID_OUT_Pin,
+                    (out == HVAC_ID_OUT_CHAIN) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(ID_AI_GPIO_Port, ID_AI_Pin,
+                    (out == HVAC_ID_OUT_RAIL) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+}
+
+static const HvacIdNodeCfg s_id_cfg = {
+  .cat = HVAC_CAT_LOCOMOTIVE,
+  .board_rev = LOCO_BOARD_REV,
+  .input_active = Id_InputActive,
+  .set_output = Id_SetOutput,
+  .send = Id_SendToPlc,
+};
+
+/* From the RX interrupt: passes an 8-byte frame unchanged to the other bus. */
+static void CAN_Forward(FDCAN_HandleTypeDef *to, uint32_t id, uint8_t is_ext, const uint8_t *data)
 {
   FDCAN_TxHeaderTypeDef h = {0};
 
   h.Identifier = id;
-  h.IdType = FDCAN_STANDARD_ID;
+  h.IdType = is_ext ? FDCAN_EXTENDED_ID : FDCAN_STANDARD_ID;
   h.TxFrameType = FDCAN_DATA_FRAME;
   h.DataLength = FDCAN_DLC_BYTES_8;
   h.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
@@ -175,6 +215,10 @@ int main(void)
   HAL_FDCAN_Start(&hfdcan1);
 
   FwupdApp_Init(Fwupd_SendToPlc, FWUPD_TYPE_LOCOMOTIVE, LOCO_BOARD_REV, LOCO_FW_VERSION);
+  {
+    const uint32_t uid[3] = { HAL_GetUIDw0(), HAL_GetUIDw1(), HAL_GetUIDw2() };
+    HvacId_Init(&s_id_cfg, fwupd_node_tag(uid));
+  }
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -214,6 +258,7 @@ int main(void)
     }
 
     FwupdApp_Poll();
+    HvacId_Poll();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -276,20 +321,34 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
     uint8_t RxData[64];
     if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &RxHeader, RxData) == HAL_OK)
     {
+      uint8_t len8 = (RxHeader.DataLength == FDCAN_DLC_BYTES_8) ? 1u : 0u;
+
+      /* Firmware update frames pass both ways, so rail modules are updated through the locomotive. */
       if (hfdcan == &hfdcan2 && RxHeader.IdType == FDCAN_EXTENDED_ID)
       {
-        FwupdApp_OnRx(RxHeader.Identifier, 1u, RxData,
-                      (RxHeader.DataLength == FDCAN_DLC_BYTES_8) ? 8u : 0u);
+        FwupdApp_OnRx(RxHeader.Identifier, 1u, RxData, len8 ? 8u : 0u);
+        if (len8) CAN_Forward(&hfdcan1, RxHeader.Identifier, 1u, RxData);
       }
-      else if (hfdcan == &hfdcan2 && RxHeader.Identifier == HVAC_CAN_ID_CFG_SET &&
-               RxHeader.DataLength == FDCAN_DLC_BYTES_8)
+      else if (hfdcan == &hfdcan1 && RxHeader.IdType == FDCAN_EXTENDED_ID)
       {
-        CAN_Forward(&hfdcan1, HVAC_CAN_ID_CFG_SET, RxData);
+        if (len8) CAN_Forward(&hfdcan2, RxHeader.Identifier, 1u, RxData);
       }
-      else if (hfdcan == &hfdcan1 && RxHeader.Identifier == HVAC_CAN_ID_CFG_STATUS &&
-               RxHeader.DataLength == FDCAN_DLC_BYTES_8)
+      else if (hfdcan == &hfdcan2 && RxHeader.Identifier == HVAC_CAN_ID_ID_CMD && len8)
       {
-        CAN_Forward(&hfdcan2, HVAC_CAN_ID_CFG_STATUS, RxData);
+        HvacId_OnCmd(RxData);
+        CAN_Forward(&hfdcan1, HVAC_CAN_ID_ID_CMD, 0u, RxData);
+      }
+      else if (hfdcan == &hfdcan1 && RxHeader.Identifier == HVAC_CAN_ID_ID_HERE && len8)
+      {
+        CAN_Forward(&hfdcan2, HVAC_CAN_ID_ID_HERE, 0u, RxData);
+      }
+      else if (hfdcan == &hfdcan2 && RxHeader.Identifier == HVAC_CAN_ID_CFG_SET && len8)
+      {
+        CAN_Forward(&hfdcan1, HVAC_CAN_ID_CFG_SET, 0u, RxData);
+      }
+      else if (hfdcan == &hfdcan1 && RxHeader.Identifier == HVAC_CAN_ID_CFG_STATUS && len8)
+      {
+        CAN_Forward(&hfdcan2, HVAC_CAN_ID_CFG_STATUS, 0u, RxData);
       }
       else if (hfdcan == &hfdcan1 && RxHeader.Identifier == HVAC_CAN_ID_AI_MEAS)
       {

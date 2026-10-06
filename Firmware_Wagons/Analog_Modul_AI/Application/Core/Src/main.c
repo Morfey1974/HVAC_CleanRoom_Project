@@ -27,7 +27,8 @@
 #include "ads1220.h"
 #include "hvac_can.h"
 #include "hvac_cfg.h"
-#include "fwupd/fwupd_proto.h"
+#include "hvac_id.h"
+#include "fwupd/fwupd_app.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -37,7 +38,9 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define AI_FW_VERSION       0x0101u /* major << 8 | minor */
+#define AI_FW_VERSION       0x0103u /* major << 8 | minor */
+#define AI_BOARD_REV        1u
+#define AI_APP_START        0x08004000u /* after the 16K bootloader, see linker script */
 
 /* ADS1220 inputs: 0/4-20 mA over 250 Ohm (up to 5 V), scaled x0.2 by INA159 */
 #define AI_CHANNELS         2u
@@ -87,6 +90,8 @@ static uint8_t s_cfg_gen;      /* generation of the last CFG_SET, 0 = defaults *
 static uint8_t s_cfg_ok_mask;
 static uint8_t s_cfg_bad_mask;
 static uint8_t s_cfg_last_err;
+
+FWUPD_APP_HEADER(FWUPD_TYPE_AI, AI_BOARD_REV, AI_FW_VERSION);
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -128,41 +133,79 @@ static uint8_t AI_ReadChannel(uint8_t ch, float *value, uint8_t *adc_fault)
   return 1u;
 }
 
-static void AI_SendCfgStatus(void)
+static void AI_Send(uint32_t id, uint8_t is_ext, const uint8_t d[8])
 {
   FDCAN_TxHeaderTypeDef h = {0};
-  uint8_t d[8];
 
-  d[0] = FWUPD_TYPE_AI;
-  d[1] = HVAC_CFG_PLACE_ANY;
-  d[2] = (uint8_t)AI_FW_VERSION;
-  d[3] = (uint8_t)(AI_FW_VERSION >> 8);
-  d[4] = s_cfg_gen;
-  d[5] = s_cfg_ok_mask;
-  d[6] = s_cfg_bad_mask;
-  d[7] = s_cfg_last_err;
-
-  h.Identifier = HVAC_CAN_ID_CFG_STATUS;
-  h.IdType = FDCAN_STANDARD_ID;
+  h.Identifier = id;
+  h.IdType = is_ext ? FDCAN_EXTENDED_ID : FDCAN_STANDARD_ID;
   h.TxFrameType = FDCAN_DATA_FRAME;
   h.DataLength = FDCAN_DLC_BYTES_8;
   h.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
   h.BitRateSwitch = FDCAN_BRS_OFF;
   h.FDFormat = FDCAN_CLASSIC_CAN;
   h.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
-  HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan2, &h, d);
+  HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan2, &h, (uint8_t *)d);
 }
 
-/* Applies one CFG_SET; the channel keeps its previous setting if the frame is rejected. */
+static void AI_SendFwupd(uint32_t ext_id, const uint8_t data[8])
+{
+  AI_Send(ext_id, 1u, data);
+}
+
+static void AI_SendStd(uint32_t std_id, const uint8_t data[8])
+{
+  AI_Send(std_id, 0u, data);
+}
+
+/* Optocoupler input with pull-up: line raised -> pin low. */
+static uint8_t AI_IdInputActive(void)
+{
+  return (HAL_GPIO_ReadPin(IN_ID_AI_GPIO_Port, IN_ID_AI_Pin) == GPIO_PIN_RESET) ? 1u : 0u;
+}
+
+static void AI_IdSetOutput(uint8_t out)
+{
+  HAL_GPIO_WritePin(OUT_ID_AI_GPIO_Port, OUT_ID_AI_Pin,
+                    (out == HVAC_ID_OUT_CHAIN) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+}
+
+static const HvacIdNodeCfg s_id_cfg = {
+  .cat = HVAC_CAT_AI,
+  .board_rev = AI_BOARD_REV,
+  .input_active = AI_IdInputActive,
+  .set_output = AI_IdSetOutput,
+  .send = AI_SendStd,
+};
+
+static void AI_SendCfgStatus(void)
+{
+  uint8_t d[8];
+  uint8_t line, rail, place;
+
+  if (!HvacId_Get(&line, &rail, &place)) rail = place = HVAC_CFG_PLACE_ANY;
+  d[0] = FWUPD_TYPE_AI;
+  d[1] = place;
+  d[2] = rail;
+  d[3] = s_cfg_gen;
+  d[4] = s_cfg_ok_mask;
+  d[5] = s_cfg_bad_mask;
+  d[6] = s_cfg_last_err;
+  d[7] = 0u;
+  AI_SendStd(HVAC_CAN_ID_CFG_STATUS, d);
+}
+
+/* Applies one CFG_SET addressed to this module; the channel keeps its previous setting if rejected. */
 static void AI_ApplyCfg(const uint8_t d[8])
 {
-  uint8_t ch = d[1];
-  uint8_t sig = d[2];
+  uint8_t ch = (uint8_t)(d[2] >> 4);
+  uint8_t sig = (uint8_t)(d[2] & 0x0Fu);
   float lo = (float)hvac_cfg_get16(&d[4]) / 10.0f;
   float hi = (float)hvac_cfg_get16(&d[6]) / 10.0f;
   uint8_t err = HVAC_CFG_E_OK;
+  uint8_t line, rail, place;
 
-  if (d[0] != HVAC_CFG_PLACE_ANY && d[0] != 1u) return;  /* single AI on the rail until places are assigned */
+  if (!HvacId_Get(&line, &rail, &place) || d[0] != place || d[1] != rail) return;
 
   if (ch < 1u || ch > AI_CHANNELS) err = HVAC_CFG_E_CHANNEL;
   else if (sig != HVAC_SIG_OFF && sig != HVAC_SIG_4_20MA && sig != HVAC_SIG_0_20MA) err = HVAC_CFG_E_SIGNAL;
@@ -205,11 +248,20 @@ static void AI_PollRx(void)
   while (HAL_FDCAN_GetRxFifoFillLevel(&hfdcan2, FDCAN_RX_FIFO0) > 0u)
   {
     if (HAL_FDCAN_GetRxMessage(&hfdcan2, FDCAN_RX_FIFO0, &rh, d) != HAL_OK) break;
-    if (rh.IdType == FDCAN_STANDARD_ID && rh.Identifier == HVAC_CAN_ID_CFG_SET &&
-        rh.DataLength == FDCAN_DLC_BYTES_8)
+    if (rh.DataLength != FDCAN_DLC_BYTES_8) continue;
+    if (rh.IdType == FDCAN_EXTENDED_ID)
     {
+      FwupdApp_OnRx(rh.Identifier, 1u, d, 8u);
+    }
+    else if (rh.Identifier == HVAC_CAN_ID_ID_CMD)
+    {
+      HvacId_OnCmd(d);
+    }
+    else if (rh.Identifier == HVAC_CAN_ID_CFG_SET)
+    {
+      uint8_t line, rail, place;
       AI_ApplyCfg(d);
-      AI_SendCfgStatus();
+      if (HvacId_Get(&line, &rail, &place) && d[0] == place && d[1] == rail) AI_SendCfgStatus();
     }
   }
 }
@@ -223,7 +275,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
+  SCB->VTOR = AI_APP_START;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -260,10 +312,16 @@ int main(void)
   TxHeader.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
   TxHeader.MessageMarker = 0;
 
-  /* Only configuration frames are received; the bus carries nothing else for the AI. */
-  HAL_FDCAN_ConfigGlobalFilter(&hfdcan2, FDCAN_ACCEPT_IN_RX_FIFO0, FDCAN_REJECT,
+  /* Standard IDs: configuration and identification; extended IDs: firmware update. */
+  HAL_FDCAN_ConfigGlobalFilter(&hfdcan2, FDCAN_ACCEPT_IN_RX_FIFO0, FDCAN_ACCEPT_IN_RX_FIFO0,
                                FDCAN_REJECT_REMOTE, FDCAN_REJECT_REMOTE);
   HAL_FDCAN_Start(&hfdcan2);
+
+  {
+    const uint32_t uid[3] = { HAL_GetUIDw0(), HAL_GetUIDw1(), HAL_GetUIDw2() };
+    FwupdApp_Init(AI_SendFwupd, FWUPD_TYPE_AI, AI_BOARD_REV, AI_FW_VERSION);
+    HvacId_Init(&s_id_cfg, fwupd_node_tag(uid));
+  }
 
   HvacAiMeas meas = {0};
   uint32_t last_send = HAL_GetTick() - AI_SEND_PERIOD_MS;
@@ -280,6 +338,8 @@ int main(void)
     }
 
     AI_PollRx();
+    FwupdApp_Poll();
+    HvacId_Poll();
 
     if (HAL_GetTick() - last_status >= HVAC_CFG_STATUS_MS)
     {

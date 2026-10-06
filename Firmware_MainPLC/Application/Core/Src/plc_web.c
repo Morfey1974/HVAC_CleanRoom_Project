@@ -7,6 +7,8 @@
  *   POST /api/fw/upload?size=N&crc=HEX   body = module .bin (size multiple of 8) -> NEW slot
  *   POST /api/fw/run?type=T&mode=M      update run (PLC_FWUPD_MODE_*)
  *   POST /api/fw/cancel
+ *   POST /api/fw/rollback?type=T        BACKUP image to every node of the type that runs another version
+ *   POST /api/id/walk                   identification walk (plc_id)
  *   POST /api/cfg?size=N&crc=HEX        body = configuration file (hvac_cfg.h) -> stored and applied
  *   GET  /api/cfg/status                configuration, module check
  */
@@ -30,7 +32,7 @@
 #define PLC_WEB_PORT        80u
 #define PLC_WEB_RX_TMO_MS   5000
 #define PLC_WEB_HDR_MAX     1024u
-#define PLC_WEB_JSON_MAX    6144u
+#define PLC_WEB_JSON_MAX    16384u
 
 static const char s_page[] =
   "<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\">"
@@ -204,9 +206,9 @@ static void PlcWeb_FwStatus(struct netconn *c, const WebReq *r)
   Json_Add("{\"up\":%lu,\"boot\":%lu,\"store\":%u,\"jedec\":\"%06lx\",\"upload\":%u,",
            (unsigned long)now, (unsigned long)s_boot_key, g_plc_fwupd.store_ok,
            (unsigned long)W25q_JedecId(), FwStore_UploadActive());
-  Json_Add("\"run\":{\"active\":%u,\"type\":%u,\"mode\":%u,\"ver\":%u,\"done\":%u,\"failed\":%u},",
+  Json_Add("\"run\":{\"active\":%u,\"type\":%u,\"mode\":%u,\"ver\":%u,\"done\":%u,\"failed\":%u,\"rollback\":%u},",
            g_plc_fwupd.run_active, g_plc_fwupd.run_type, g_plc_fwupd.run_mode, g_plc_fwupd.run_version,
-           g_plc_fwupd.run_done, g_plc_fwupd.run_failed);
+           g_plc_fwupd.run_done, g_plc_fwupd.run_failed, g_plc_fwupd.run_rollback);
   Json_Add("\"busy\":%u,\"busyTag\":\"%06lx\",\"step\":%u,\"progress\":%u,",
            g_plc_fwupd.busy, (unsigned long)g_plc_fwupd.busy_tag, g_plc_fwupd.step, g_plc_fwupd.progress);
   Json_Add("\"stats\":{\"ok\":%lu,\"failed\":%lu,\"retries\":%lu,\"rx\":%lu,\"drop\":%lu},",
@@ -237,10 +239,10 @@ static void PlcWeb_FwStatus(struct netconn *c, const WebReq *r)
 
     if (n->tag == 0u) continue;
     Json_Add("%s{\"tag\":\"%06lx\",\"type\":%u,\"board\":%u,\"state\":%u,\"boot\":%u,\"ver\":%u,\"fails\":%u,"
-             "\"link\":%u,\"mismatch\":%u,\"result\":%u,\"attempts\":%u,\"err\":%u,\"step\":%u,\"age\":%lu}",
+             "\"link\":%u,\"mismatch\":%u,\"result\":%u,\"attempts\":%u,\"err\":%u,\"step\":%u,\"age\":%lu,\"bus\":%u}",
              sep, (unsigned long)n->tag, n->module_type, n->board_rev, n->state, n->boot_version, n->app_version,
              n->boot_fails, n->link, n->version_mismatch, n->result, n->attempts, n->last_err, n->last_step,
-             (unsigned long)(now - n->last_seen));
+             (unsigned long)(now - n->last_seen), n->bus);
     sep = ",";
   }
 
@@ -300,25 +302,53 @@ static void PlcWeb_FwUploadDone(struct netconn *c, uint8_t err)
 
 static void PlcWeb_CfgStatus(struct netconn *c)
 {
+  static PlcIdFound found[PLC_ID_MAX_FOUND];
   PlcCfgSummary s;
+  PlcIdSummary ids;
+  PlcIdFound e;
+  uint8_t nfound;
   const char *sep = "";
+  uint32_t now = osKernelGetTickCount();
 
   PlcCfg_GetSummary(&s);
+  PlcId_GetSummary(&ids);
   s_json_len = 0u;
   Json_Add("{\"up\":%lu,\"flash\":%u,\"present\":%u,\"gen\":%u,\"state\":%u,\"size\":%lu,\"crc\":\"%08lx\","
            "\"project\":\"%s\",\"modules\":%u,\"channels\":%u,\"applied\":%lu,\"resends\":%lu,"
-           "\"extraLoco\":%u,\"extraAi\":%u,\"plcVer\":%u,\"mods\":[",
-           (unsigned long)osKernelGetTickCount(), s.flash_ok, s.present, s.gen, s.state, (unsigned long)s.size,
+           "\"extraLoco\":%u,\"extraAi\":%u,\"problems\":%u,\"plcVer\":%u,",
+           (unsigned long)now, s.flash_ok, s.present, s.gen, s.state, (unsigned long)s.size,
            (unsigned long)s.crc, s.project, s.module_count, s.channel_count, (unsigned long)s.applied_ms,
-           (unsigned long)s.resends, s.extra_loco, s.extra_ai, PLC_FW_VERSION);
+           (unsigned long)s.resends, s.extra_loco, s.extra_ai, s.problems, PLC_FW_VERSION);
+  Json_Add("\"walk\":{\"busy\":%u,\"walks\":%u,\"count\":%u,\"stray\":%u,\"age\":%lu},\"mods\":[",
+           ids.busy, ids.walks, ids.count, ids.stray, (unsigned long)(ids.walks ? (now - ids.done_ms) : 0u));
   for (uint16_t i = 0u; i < s.module_count; i++)
   {
     HvacCfgModule m;
     PlcCfgModState st;
 
     if (!PlcCfg_GetModule(i, &m, &st)) break;
-    Json_Add("%s{\"type\":%u,\"l\":%u,\"r\":%u,\"p\":%u,\"st\":%u,\"err\":%u,\"ok\":%u,\"bad\":%u,\"ver\":%u}",
-             sep, m.type, m.line, m.rail, m.place, st.state, st.err, st.ok_mask, st.bad_mask, st.version);
+    Json_Add("%s{\"type\":%u,\"l\":%u,\"r\":%u,\"p\":%u,\"st\":%u,\"err\":%u,\"ok\":%u,\"bad\":%u,\"ver\":%u,"
+             "\"fc\":%u,\"tag\":\"%06lx\"}",
+             sep, m.type, m.line, m.rail, m.place, st.state, st.err, st.ok_mask, st.bad_mask, st.version,
+             st.found_cat, (unsigned long)st.tag);
+    sep = ",";
+  }
+  Json_Add("],\"extra\":[");
+  sep = "";
+  for (uint8_t i = 0u; i < s.extra_count && PlcCfg_GetExtra(i, &e); i++)
+  {
+    Json_Add("%s{\"type\":%u,\"l\":%u,\"r\":%u,\"p\":%u,\"tag\":\"%06lx\"}",
+             sep, e.cat, e.line, e.rail, e.place, (unsigned long)e.tag);
+    sep = ",";
+  }
+  Json_Add("],\"found\":[");
+  sep = "";
+  nfound = PlcId_GetFound(found, PLC_ID_MAX_FOUND);
+  for (uint8_t i = 0u; i < nfound; i++)
+  {
+    Json_Add("%s{\"type\":%u,\"l\":%u,\"r\":%u,\"p\":%u,\"tag\":\"%06lx\",\"board\":%u}",
+             sep, found[i].cat, found[i].line, found[i].rail, found[i].place, (unsigned long)found[i].tag,
+             found[i].board);
     sep = ",";
   }
   Json_Add("]}");
@@ -455,6 +485,15 @@ static void PlcWeb_Serve(struct netconn *c)
   else if (strcmp(r.method, "POST") == 0 && strcmp(r.path, "/api/fw/cancel") == 0)
   {
     PlcFwupd_Cancel();
+    PlcWeb_FwResult(c, 0u);
+  }
+  else if (strcmp(r.method, "POST") == 0 && strcmp(r.path, "/api/fw/rollback") == 0)
+  {
+    PlcWeb_FwResult(c, PlcFwupd_RequestRollback((uint8_t)Query_U32(r.query, "type", 10, 0u)));
+  }
+  else if (strcmp(r.method, "POST") == 0 && strcmp(r.path, "/api/id/walk") == 0)
+  {
+    PlcId_RequestWalk();
     PlcWeb_FwResult(c, 0u);
   }
   else if (strcmp(r.method, "GET") == 0 && strcmp(r.path, "/api/ai") == 0)

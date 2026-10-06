@@ -29,6 +29,9 @@
 #include "ssd1963.h"
 #include "room_ui.h"
 #include "hvac_can.h"
+#include "hvac_cfg.h"
+#include "hvac_id.h"
+#include "fwupd/fwupd_app.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -60,6 +63,16 @@
 #define DEMO_TEMPERATURE_C   22.4f
 #define DEMO_HUMIDITY_PCT    45.0f
 #define DEMO_PRESSURE_PA     20.0f
+
+#define DISP_BOARD_REV       1u
+#define DISP_FW_VERSION      0x0103u /* major << 8 | minor */
+#define DISP_ID_ENABLED      0u /* board rev 1 has no ID input from the HUB; 1 on boards with it */
+#define DISP_APP_VTOR        0x08020400u /* vector table, see linker script */
+#define DISP_CHAIN_TIMEOUT_MS 3000u
+#define DISP_ID_X            640u
+#define DISP_CHAIN_X         160u
+#define DISP_CHAIN_Y         132u
+#define DISP_CHAIN_CHARS     52u
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -68,8 +81,21 @@
 /* USER CODE END PM */
 
 /* USER CODE BEGIN PV */
-uint32_t my_display_id = 0;
 static RoomUi_Values g_room_values;
+
+extern uint32_t _estack;
+void Reset_Handler(void);
+
+/* The H7 vector table is longer than FWUPD_HEADER_OFFSET: the bootloader takes SP and reset handler
+ * from here, the full table follows at +0x400 (DISP_APP_VTOR). */
+__attribute__((section(".boot_vec"), used)) const void *const g_boot_vec[2] = { &_estack, (void *)Reset_Handler };
+
+FWUPD_APP_HEADER(FWUPD_TYPE_DISPLAY_TFT43, DISP_BOARD_REV, DISP_FW_VERSION);
+
+/* Last chain summary from the Main PLC (HVAC_CAN_ID_CHAIN), written by the FDCAN interrupt. */
+static volatile uint8_t s_chain[8];
+static volatile uint32_t s_chain_rx_tick;
+static volatile uint8_t s_chain_received;
 extern FDCAN_HandleTypeDef hfdcan1;
 FDCAN_RxHeaderTypeDef RxHeader;
 uint8_t RxData[8];
@@ -98,6 +124,142 @@ static void MPU_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+/* Queues one 8-byte frame; called from the main loop and from the FDCAN interrupt. */
+static void Disp_Send(uint32_t id, uint8_t is_ext, const uint8_t d[8])
+{
+  FDCAN_TxHeaderTypeDef h = {0};
+  uint32_t primask = __get_PRIMASK();
+
+  h.Identifier = id;
+  h.IdType = is_ext ? FDCAN_EXTENDED_ID : FDCAN_STANDARD_ID;
+  h.TxFrameType = FDCAN_DATA_FRAME;
+  h.DataLength = FDCAN_DLC_BYTES_8;
+  h.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
+  h.BitRateSwitch = FDCAN_BRS_OFF;
+  h.FDFormat = FDCAN_CLASSIC_CAN;
+  h.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
+  __disable_irq();
+  HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &h, (uint8_t *)d);
+  __set_PRIMASK(primask);
+}
+
+static void Disp_SendFwupd(uint32_t ext_id, const uint8_t d[8])
+{
+  Disp_Send(ext_id, 1u, d);
+}
+
+static void Disp_SendId(uint32_t std_id, const uint8_t d[8])
+{
+  Disp_Send(std_id, 0u, d);
+}
+
+/* Optocoupler input with pull-up: line raised -> pin low. */
+static uint8_t Disp_IdInputActive(void)
+{
+  return (HAL_GPIO_ReadPin(Plata_ID_GPIO_Port, Plata_ID_Pin) == GPIO_PIN_RESET) ? 1u : 0u;
+}
+
+static void Disp_IdSetOutput(uint8_t out)
+{
+  (void)out; /* the display has no ID output */
+}
+
+static const HvacIdNodeCfg s_id_cfg = {
+  .cat = HVAC_CAT_TFT43,
+  .board_rev = DISP_BOARD_REV,
+  .input_active = Disp_IdInputActive,
+  .set_output = Disp_IdSetOutput,
+  .send = Disp_SendId,
+};
+
+static const char *Disp_TypeName(uint8_t cat)
+{
+  switch (cat)
+  {
+    case HVAC_CAT_LOCOMOTIVE:   return "LOC";
+    case HVAC_CAT_AI:           return "AI";
+    case HVAC_CAT_AO:           return "AO";
+    case HVAC_CAT_DI:           return "DI";
+    case HVAC_CAT_DO:           return "DO";
+    case HVAC_CAT_RELAY:        return "RL";
+    case HVAC_CAT_HUB_DISPLAYS: return "HUBD";
+    case HVAC_CAT_TFT43:        return "TFT";
+    default:                    return "?";
+  }
+}
+
+/* Own place ID in the top right corner: system name "TFT-RR.MM". */
+static void Disp_DrawId(void)
+{
+  char s[16];
+  uint8_t line, rail, place;
+
+  if (HvacId_Get(&line, &rail, &place)) snprintf(s, sizeof(s), "TFT-%02u.%02u", rail, place);
+  else                                  snprintf(s, sizeof(s), "TFT-?    ");
+  SSD1963_DrawString(DISP_ID_X, 10, s, 0xFFE0, 0x0000, 2);
+}
+
+/* First problem of the module check from the Main PLC, under the title. */
+static void Disp_DrawChain(void)
+{
+  static char last[128];
+  char msg[96] = "";
+  char s[128];
+  uint8_t c[8];
+  uint8_t fresh;
+  uint16_t bg = SSD1963_RGB565(204, 204, 204);
+  uint16_t fg = SSD1963_COLOR_BLACK;
+  uint32_t n;
+
+  __disable_irq();
+  for (uint32_t i = 0u; i < 8u; i++) c[i] = s_chain[i];
+  fresh = (s_chain_received && (HAL_GetTick() - s_chain_rx_tick) < DISP_CHAIN_TIMEOUT_MS) ? 1u : 0u;
+  __enable_irq();
+
+  if (fresh && c[0] == HVAC_CHAIN_ST_BUSY)
+  {
+    snprintf(msg, sizeof(msg), "Модули: проверка...");
+  }
+  else if (fresh && c[0] == HVAC_CHAIN_ST_ERROR)
+  {
+    char place[32];
+
+    if (c[4] == HVAC_ID_NONE) snprintf(place, sizeof(place), "вне цепочки");
+    else                      snprintf(place, sizeof(place), "%u.%02u.%02u", c[3], c[4], c[5]);
+    switch (c[2])
+    {
+      case HVAC_CHAIN_P_MISSING:
+        snprintf(msg, sizeof(msg), "Нет модуля %s %s", Disp_TypeName(c[6]), place);
+        break;
+      case HVAC_CHAIN_P_WRONG_TYPE:
+        snprintf(msg, sizeof(msg), "%s: нужен %s, стоит %s", place, Disp_TypeName(c[6]), Disp_TypeName(c[7]));
+        break;
+      case HVAC_CHAIN_P_EXTRA:
+        snprintf(msg, sizeof(msg), "Лишний модуль %s %s", Disp_TypeName(c[7]), place);
+        break;
+      default:
+        snprintf(msg, sizeof(msg), "Ошибка настройки %s %s", Disp_TypeName(c[6]), place);
+        break;
+    }
+    if (c[1] > 1u)
+    {
+      size_t len = strlen(msg);
+      snprintf(&msg[len], sizeof(msg) - len, " (+%u)", (unsigned)(c[1] - 1u));
+    }
+    bg = SSD1963_COLOR_RED;
+    fg = SSD1963_COLOR_WHITE;
+  }
+
+  /* Pad with spaces (counted in characters, Cyrillic letters are 2 bytes) to erase the old text. */
+  n = 0u;
+  for (const char *p = msg; *p; p++) if (((uint8_t)*p & 0xC0u) != 0x80u) n++;
+  snprintf(s, sizeof(s), "%s", msg);
+  for (size_t len = strlen(s); n < DISP_CHAIN_CHARS && len + 1u < sizeof(s); n++, len++) { s[len] = ' '; s[len + 1u] = '\0'; }
+  if (strcmp(s, last) == 0) return;
+  strcpy(last, s);
+  SSD1963_DrawString(DISP_CHAIN_X, DISP_CHAIN_Y, s, fg, bg, 1U);
+}
+
 #if NODE_INDEX == 0
 /* Applies the latest AI frame (or its absence) to the values shown on screen. */
 static void Display_ApplyAiMeas(RoomUi_Values *v)
@@ -162,6 +324,8 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
+  SCB->VTOR = DISP_APP_VTOR;
+  __DSB();
   SCB_EnableICache();
   SCB_EnableDCache();
   /* USER CODE END 1 */
@@ -244,10 +408,19 @@ int main(void)
   sFilterConfig.FilterID1 = 0x000;
   sFilterConfig.FilterID2 = 0x000;
   HAL_FDCAN_ConfigFilter(&hfdcan1, &sFilterConfig);
+  /* Extended IDs = firmware update protocol. */
+  HAL_FDCAN_ConfigGlobalFilter(&hfdcan1, FDCAN_ACCEPT_IN_RX_FIFO0, FDCAN_ACCEPT_IN_RX_FIFO0,
+                               FDCAN_REJECT_REMOTE, FDCAN_REJECT_REMOTE);
   HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0);
 
   /* Start CAN for both roles */
   HAL_FDCAN_Start(&hfdcan1);
+
+  FwupdApp_Init(Disp_SendFwupd, FWUPD_TYPE_DISPLAY_TFT43, DISP_BOARD_REV, DISP_FW_VERSION);
+  {
+    const uint32_t uid[3] = { HAL_GetUIDw0(), HAL_GetUIDw1(), HAL_GetUIDw2() };
+    if (DISP_ID_ENABLED) HvacId_Init(&s_id_cfg, fwupd_node_tag(uid));
+  }
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -275,17 +448,17 @@ int main(void)
     Display_ApplyDoors();
 #endif
     RoomUi_Update(&g_room_values);
+    if (DISP_ID_ENABLED) Disp_DrawId();
+    Disp_DrawChain();
 
-    char id_str[16];
-    if (my_display_id == 0) {
-        sprintf(id_str, "ID: WAIT ");
-    } else {
-        sprintf(id_str, "ID:%-5lu", my_display_id); // pad with spaces
+    for (uint32_t t0 = HAL_GetTick(); (HAL_GetTick() - t0) < 500u; )
+    {
+      FwupdApp_Poll();
+      __disable_irq();
+      HvacId_Poll(); /* also called from the FDCAN interrupt */
+      __enable_irq();
+      HAL_Delay(10);
     }
-    // Желтый на черном, правый верхний угол
-    SSD1963_DrawString(650, 10, id_str, 0xFFE0, 0x0000, 2);
-
-    HAL_Delay(500);
   }
   /* USER CODE END 3 */
 }
@@ -354,15 +527,26 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 {
   if((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) != RESET)
   {
-    if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &RxHeader, RxData) == HAL_OK)
+    while (HAL_FDCAN_GetRxFifoFillLevel(hfdcan, FDCAN_RX_FIFO0) > 0u &&
+           HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &RxHeader, RxData) == HAL_OK)
     {
-      if (RxHeader.Identifier == 0x400)
+      uint8_t len8 = (RxHeader.DataLength == FDCAN_DLC_BYTES_8) ? 1u : 0u;
+
+      if (RxHeader.IdType == FDCAN_EXTENDED_ID)
       {
-        if (HAL_GPIO_ReadPin(Plata_ID_GPIO_Port, Plata_ID_Pin) == GPIO_PIN_SET)
-        {
-          uint32_t new_id = RxData[0] | (RxData[1] << 8) | (RxData[2] << 16) | (RxData[3] << 24);
-          my_display_id = new_id;
-        }
+        FwupdApp_OnRx(RxHeader.Identifier, 1u, RxData, len8 ? 8u : 0u);
+      }
+      else if (RxHeader.Identifier == HVAC_CAN_ID_ID_CMD && len8)
+      {
+        /* Answer at once: the main loop is slow while it draws, the PLC waits HVAC_ID_ANSWER_MS. */
+        HvacId_OnCmd(RxData);
+        HvacId_Poll();
+      }
+      else if (RxHeader.Identifier == HVAC_CAN_ID_CHAIN && len8)
+      {
+        for (uint32_t i = 0u; i < 8u; i++) s_chain[i] = RxData[i];
+        s_chain_rx_tick = HAL_GetTick();
+        s_chain_received = 1u;
       }
       else if (RxHeader.Identifier == (0x201 + NODE_INDEX))
       {

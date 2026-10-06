@@ -82,6 +82,13 @@ public class PlcFirmwareClient(IServiceScopeFactory scopes)
 
     public Task<string> CancelAsync(CancellationToken ct) => CommandAsync("/api/fw/cancel", ct);
 
+    /// <summary>Sends the previous (backup) image of the type to its modules; {ok | err}.</summary>
+    public Task<string> RollbackAsync(int moduleType, CancellationToken ct) =>
+        CommandAsync($"/api/fw/rollback?type={moduleType}", ct);
+
+    /// <summary>Starts a new module identification walk on the PLC.</summary>
+    public Task<string> IdWalkAsync(CancellationToken ct) => CommandAsync("/api/id/walk", ct);
+
     private async Task<string> CommandAsync(string path, CancellationToken ct)
     {
         if (!await _gate.WaitAsync(ShortTimeout, ct)) throw new PlcUnavailableException("plc_busy");

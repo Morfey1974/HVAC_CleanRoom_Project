@@ -12,6 +12,7 @@
 #include "plc_fwupd.h"
 #include "plc_fwstore.h"
 #include "plc_w25q.h"
+#include "plc_id.h"
 
 /* Two copies in the reserved first megabyte of W25Q128 (module images start at 1 MB). */
 #define CFG_FLASH_BASE        0x00000000u
@@ -24,6 +25,7 @@
 #define CFG_STATUS_FRESH_MS   3000u
 #define CFG_RESEND_MS         1000u
 #define CFG_CONFIRM_TRIES     5u
+#define CFG_STATUS_SLOTS      16u
 
 typedef struct
 {
@@ -59,13 +61,31 @@ static uint32_t s_resends;
 static uint8_t  s_extra_loco;
 static uint8_t  s_extra_ai;
 static uint32_t s_last_eval;
+static uint32_t s_last_chain;
+static uint16_t s_walks_seen;
 
-/* AI module: last CFG_STATUS and the apply state machine */
-static volatile uint8_t  s_ai_st[8];
-static volatile uint32_t s_ai_seen;
-static uint8_t  s_ai_tries;
-static uint32_t s_ai_last_send;
-static uint8_t  s_ai_prev_gen;
+/* Found modules that are not in the configuration, and modules without ID outside the chain. */
+static PlcIdFound s_extra[PLC_CFG_MAX_EXTRA];
+static uint8_t  s_extra_n;
+static uint8_t  s_chain[8];
+
+/* Last CFG_STATUS of every rail module with an ID, keyed by rail and place. */
+typedef struct
+{
+  uint8_t  rail;
+  uint8_t  place;
+  uint8_t  d[8];
+  uint32_t seen;
+} CfgStatus;
+
+static volatile CfgStatus s_status[CFG_STATUS_SLOTS];
+
+/* Apply state machine of every configured module (index = module table index). */
+static uint8_t  s_tries[HVAC_CFGF_MAX_MODULES];
+static uint8_t  s_prev_gen[HVAC_CFGF_MAX_MODULES];
+static uint32_t s_last_send[HVAC_CFGF_MAX_MODULES];
+
+static PlcIdFound s_found[PLC_ID_MAX_FOUND];
 
 /* ---------- file helpers ---------- */
 
@@ -125,9 +145,9 @@ static void Cfg_ResetRuntime(void)
   for (uint32_t i = 0u; i < HVAC_CFGF_MAX_MODULES; i++) s_mod[i].state = PLC_CFG_MOD_APPLYING;
   s_state = PLC_CFG_ST_APPLYING;
   s_applied_ms = 0u;
-  s_ai_tries = 0u;
-  s_ai_last_send = osKernelGetTickCount() - CFG_RESEND_MS;
-  s_ai_prev_gen = 0u;
+  memset(s_tries, 0, sizeof(s_tries));
+  memset(s_prev_gen, 0, sizeof(s_prev_gen));
+  for (uint32_t i = 0u; i < HVAC_CFGF_MAX_MODULES; i++) s_last_send[i] = osKernelGetTickCount() - CFG_RESEND_MS;
 }
 
 /* Reads one flash copy into s_act; returns 1 if it is complete and valid. */
@@ -191,13 +211,93 @@ static uint8_t Cfg_Store(const uint8_t *blob, uint32_t len, uint32_t crc, uint8_
 
 /* ---------- module check ---------- */
 
-static void Cfg_SendAiChannel(uint16_t mod_idx, const HvacCfgHeader *h, uint8_t ch)
+static uint8_t Cfg_FwupdType(uint8_t cat)
+{
+  switch (cat)
+  {
+    case HVAC_CAT_LOCOMOTIVE:   return FWUPD_TYPE_LOCOMOTIVE;
+    case HVAC_CAT_HUB_DISPLAYS: return FWUPD_TYPE_HUB_DISPLAYS;
+    case HVAC_CAT_TFT43:        return FWUPD_TYPE_DISPLAY_TFT43;
+    case HVAC_CAT_AI:           return FWUPD_TYPE_AI;
+    default:                    return 0u;
+  }
+}
+
+/* Types that take part in the identification walk. */
+static uint8_t Cfg_HasId(uint8_t cat)
+{
+  return (cat >= HVAC_CAT_LOCOMOTIVE && cat <= HVAC_CAT_TFT43) ? 1u : 0u;
+}
+
+static volatile PlcFwupdNode *Cfg_NodeByTag(uint32_t tag)
+{
+  for (uint32_t i = 0u; i < PLC_FWUPD_MAX_NODES; i++)
+  {
+    if (g_plc_fwupd.nodes[i].tag == tag && tag != 0u) return &g_plc_fwupd.nodes[i];
+  }
+  return NULL;
+}
+
+/* A module of this type that stays in its bootloader does not answer the walk. */
+static uint8_t Cfg_TypeInBoot(uint8_t cat)
+{
+  uint8_t t = Cfg_FwupdType(cat);
+
+  for (uint32_t i = 0u; i < PLC_FWUPD_MAX_NODES && t != 0u; i++)
+  {
+    volatile PlcFwupdNode *n = &g_plc_fwupd.nodes[i];
+    if (n->tag != 0u && n->link && n->module_type == t && n->state != FWUPD_ST_APP_RUNNING) return 1u;
+  }
+  return 0u;
+}
+
+/* k-th running display that has no ID (old boards without the ID input), NULL if none. */
+static volatile PlcFwupdNode *Cfg_TftWithoutId(uint8_t k, uint8_t nfound)
+{
+  for (uint32_t i = 0u; i < PLC_FWUPD_MAX_NODES; i++)
+  {
+    volatile PlcFwupdNode *n = &g_plc_fwupd.nodes[i];
+    uint8_t has_id = 0u;
+
+    if (n->tag == 0u || !n->link || n->module_type != FWUPD_TYPE_DISPLAY_TFT43 ||
+        n->state != FWUPD_ST_APP_RUNNING) continue;
+    for (uint8_t j = 0u; j < nfound; j++)
+    {
+      if (s_found[j].tag == n->tag) { has_id = 1u; break; }
+    }
+    if (has_id) continue;
+    if (k == 0u) return n;
+    k--;
+  }
+  return NULL;
+}
+
+static uint8_t Cfg_GetStatus(uint8_t rail, uint8_t place, uint32_t now, uint8_t d[8])
+{
+  uint8_t ok = 0u;
+
+  taskENTER_CRITICAL();
+  for (uint32_t i = 0u; i < CFG_STATUS_SLOTS; i++)
+  {
+    if (s_status[i].seen != 0u && s_status[i].rail == rail && s_status[i].place == place &&
+        (now - s_status[i].seen) < CFG_STATUS_FRESH_MS)
+    {
+      memcpy(d, (const void *)s_status[i].d, 8u);
+      ok = 1u;
+      break;
+    }
+  }
+  taskEXIT_CRITICAL();
+  return ok;
+}
+
+static void Cfg_SendAiChannel(uint16_t mod_idx, const HvacCfgModule *m, const HvacCfgHeader *h, uint8_t ch)
 {
   uint8_t d[8] = {0};
+  uint8_t sig = HVAC_SIG_OFF;
 
-  d[0] = HVAC_CFG_PLACE_ANY;
-  d[1] = ch;
-  d[2] = HVAC_SIG_OFF;
+  d[0] = m->place;
+  d[1] = m->rail;
   d[3] = s_gen;
   for (uint16_t i = 0u; i < h->channel_count; i++)
   {
@@ -205,64 +305,46 @@ static void Cfg_SendAiChannel(uint16_t mod_idx, const HvacCfgHeader *h, uint8_t 
     Cfg_Channel(s_act, h->module_count, i, &c);
     if (c.module == mod_idx && c.channel == ch)
     {
-      d[2] = c.signal;
+      sig = c.signal;
       hvac_cfg_put16(&d[4], c.min_x10);
       hvac_cfg_put16(&d[6], c.max_x10);
       break;
     }
   }
-  (void)PlcCan_SendLoco(HVAC_CAN_ID_CFG_SET, 0u, d);
+  d[2] = (uint8_t)((ch << 4) | (sig & 0x0Fu));
+  (void)PlcCan_Send(PLC_CAN_BUS_LOCO, HVAC_CAN_ID_CFG_SET, 0u, d);
 }
 
+/* AI found at its place: channel settings until the module confirms this generation. */
 static void Cfg_CheckAi(uint16_t idx, const HvacCfgModule *m, const HvacCfgHeader *h, PlcCfgModState *st, uint32_t now)
 {
   uint8_t want = (m->channels >= 8u) ? 0xFFu : (uint8_t)((1u << m->channels) - 1u);
   uint8_t d[8];
-  uint32_t seen;
 
-  taskENTER_CRITICAL();
-  memcpy(d, (const void *)s_ai_st, 8u);
-  seen = s_ai_seen;
-  taskEXIT_CRITICAL();
-
-  if (seen == 0u || (now - seen) >= CFG_STATUS_FRESH_MS || d[0] != FWUPD_TYPE_AI)
+  if (Cfg_GetStatus(m->rail, m->place, now, d) && d[0] == FWUPD_TYPE_AI)
   {
-    st->state = PLC_CFG_MOD_MISSING;
-    st->version = 0u;
-    s_ai_tries = 0u;
-    return;
-  }
+    st->ok_mask = d[4] & want;
+    st->bad_mask = d[5] & want;
 
-  st->version = fwupd_get16(&d[2]);
-  st->ok_mask = d[5] & want;
-  st->bad_mask = d[6] & want;
-
-  if (d[4] == s_gen && ((d[5] | d[6]) & want) == want)
-  {
-    s_ai_tries = 0u;
-    s_ai_prev_gen = d[4];
-    if (st->bad_mask != 0u)
+    if (d[3] == s_gen && ((d[4] | d[5]) & want) == want)
     {
-      st->state = PLC_CFG_MOD_ERROR;
-      st->err = (d[7] != 0u) ? d[7] : HVAC_CFG_E_SIGNAL;
+      s_tries[idx] = 0u;
+      s_prev_gen[idx] = d[3];
+      st->state = (st->bad_mask != 0u) ? PLC_CFG_MOD_ERROR : PLC_CFG_MOD_OK;
+      st->err = (st->bad_mask != 0u) ? ((d[6] != 0u) ? d[6] : HVAC_CFG_E_SIGNAL) : PLC_CFG_ERR_NONE;
+      return;
     }
-    else
+
+    /* Module answered with this generation before and lost it: it restarted. */
+    if (s_prev_gen[idx] == s_gen && d[3] != s_gen)
     {
-      st->state = PLC_CFG_MOD_OK;
-      st->err = PLC_CFG_ERR_NONE;
+      s_resends++;
+      PlcFwupd_Log(PLC_FWUPD_EV_CFG_RESEND, st->tag, HVAC_CAT_AI, 0u, 0u, d[3], s_gen);
     }
-    return;
+    s_prev_gen[idx] = d[3];
   }
 
-  /* Module answered with this generation before and lost it: it restarted. */
-  if (s_ai_prev_gen == s_gen && d[4] != s_gen)
-  {
-    s_resends++;
-    PlcFwupd_Log(PLC_FWUPD_EV_CFG_RESEND, 0u, HVAC_CAT_AI, 0u, 0u, d[4], s_gen);
-  }
-  s_ai_prev_gen = d[4];
-
-  if (s_ai_tries >= CFG_CONFIRM_TRIES)
+  if (s_tries[idx] >= CFG_CONFIRM_TRIES)
   {
     st->state = PLC_CFG_MOD_ERROR;
     st->err = PLC_CFG_ERR_NO_CONFIRM;
@@ -272,97 +354,174 @@ static void Cfg_CheckAi(uint16_t idx, const HvacCfgModule *m, const HvacCfgHeade
     st->state = PLC_CFG_MOD_APPLYING;
   }
 
-  if ((now - s_ai_last_send) >= CFG_RESEND_MS)
+  if ((now - s_last_send[idx]) >= CFG_RESEND_MS)
   {
-    for (uint8_t ch = 1u; ch <= m->channels; ch++) Cfg_SendAiChannel(idx, h, ch);
-    s_ai_last_send = now;
-    if (s_ai_tries < 255u) s_ai_tries++;
+    for (uint8_t ch = 1u; ch <= m->channels; ch++) Cfg_SendAiChannel(idx, m, h, ch);
+    s_last_send[idx] = now;
+    if (s_tries[idx] < 255u) s_tries[idx]++;
   }
+}
+
+static void Cfg_Problem(uint8_t *count, uint8_t p, uint8_t line, uint8_t rail, uint8_t place, uint8_t want, uint8_t found)
+{
+  if (*count == 0u)
+  {
+    s_chain[2] = p;
+    s_chain[3] = line;
+    s_chain[4] = rail;
+    s_chain[5] = place;
+    s_chain[6] = want;
+    s_chain[7] = found;
+  }
+  if (*count < 255u) (*count)++;
 }
 
 static void Cfg_Evaluate(uint32_t now)
 {
   HvacCfgHeader h;
-  uint8_t loco_nodes[PLC_FWUPD_MAX_NODES];
-  uint8_t nloco = 0u, loco_k = 0u, ai_k = 0u;
-  uint8_t any_err = 0u, any_apply = 0u;
+  PlcIdSummary ids;
+  uint8_t used[PLC_ID_MAX_FOUND];
+  uint8_t nfound;
+  uint8_t any_apply = 0u;
+  uint8_t problems = 0u;
+  uint8_t tft_k = 0u;
+  volatile PlcFwupdNode *tft;
   uint8_t err_type = 0u, err_code = 0u;
-  uint8_t ai_fresh;
   uint8_t state;
 
   Cfg_Header(s_act, &h);
+  PlcId_GetSummary(&ids);
+  nfound = PlcId_GetFound(s_found, PLC_ID_MAX_FOUND);
+  memset(used, 0, sizeof(used));
+  memset(s_chain, 0, sizeof(s_chain));
 
-  for (uint8_t i = 0u; i < PLC_FWUPD_MAX_NODES; i++)
+  /* New walk: modules have new IDs, confirmation counters start again. */
+  if (ids.walks != s_walks_seen)
   {
-    volatile PlcFwupdNode *n = &g_plc_fwupd.nodes[i];
-    if (n->tag != 0u && n->link && n->module_type == FWUPD_TYPE_LOCOMOTIVE) loco_nodes[nloco++] = i;
+    s_walks_seen = ids.walks;
+    memset(s_tries, 0, sizeof(s_tries));
   }
 
   for (uint16_t i = 0u; i < h.module_count; i++)
   {
     HvacCfgModule m;
     PlcCfgModState *st = &s_mod[i];
+    int f = -1;
 
     Cfg_Module(s_act, i, &m);
-    switch (m.type)
+    st->found_cat = 0u;
+    st->tag = 0u;
+
+    if (m.type == HVAC_CAT_PLC)
     {
-      case HVAC_CAT_PLC:
-        st->state = PLC_CFG_MOD_OK;
-        st->version = PLC_FW_VERSION;
+      st->state = PLC_CFG_MOD_OK;
+      st->version = PLC_FW_VERSION;
+      st->err = PLC_CFG_ERR_NONE;
+      continue;
+    }
+    if (!Cfg_HasId(m.type))
+    {
+      st->state = PLC_CFG_MOD_UNCHECKED;
+      continue;
+    }
+    if (ids.busy || ids.walks == 0u)
+    {
+      st->state = PLC_CFG_MOD_APPLYING;
+      any_apply = 1u;
+      continue;
+    }
+
+    for (uint8_t k = 0u; k < nfound; k++)
+    {
+      if (s_found[k].line == m.line && s_found[k].rail == m.rail && s_found[k].place == m.place) { f = k; break; }
+    }
+
+    if (f < 0 && m.type == HVAC_CAT_TFT43 && (tft = Cfg_TftWithoutId(tft_k, nfound)) != NULL)
+    {
+      tft_k++;
+      st->state = PLC_CFG_MOD_ON_BUS; /* answers on the bus, place not checked */
+      st->tag = tft->tag;
+      st->found_cat = m.type;
+      st->version = tft->app_version;
+      st->err = PLC_CFG_ERR_NONE;
+    }
+    else if (f < 0)
+    {
+      st->state = PLC_CFG_MOD_MISSING;
+      st->version = 0u;
+      st->err = Cfg_TypeInBoot(m.type) ? PLC_CFG_ERR_IN_BOOT : PLC_CFG_ERR_NONE;
+      Cfg_Problem(&problems, HVAC_CHAIN_P_MISSING, m.line, m.rail, m.place, m.type, 0u);
+    }
+    else
+    {
+      volatile PlcFwupdNode *n = Cfg_NodeByTag(s_found[f].tag);
+
+      used[f] = 1u;
+      st->tag = s_found[f].tag;
+      st->found_cat = s_found[f].cat;
+      st->version = (n != NULL) ? n->app_version : 0u;
+      if (s_found[f].cat != m.type)
+      {
+        st->state = PLC_CFG_MOD_WRONG_TYPE;
         st->err = PLC_CFG_ERR_NONE;
-        break;
-
-      case HVAC_CAT_LOCOMOTIVE:
-        if (loco_k < nloco)
+        Cfg_Problem(&problems, HVAC_CHAIN_P_WRONG_TYPE, m.line, m.rail, m.place, m.type, s_found[f].cat);
+      }
+      else if (m.type == HVAC_CAT_AI)
+      {
+        Cfg_CheckAi(i, &m, &h, st, now);
+        if (st->state == PLC_CFG_MOD_ERROR)
         {
-          volatile PlcFwupdNode *n = &g_plc_fwupd.nodes[loco_nodes[loco_k++]];
-          st->version = n->app_version;
-          st->state = (n->state == FWUPD_ST_APP_RUNNING) ? PLC_CFG_MOD_OK : PLC_CFG_MOD_ERROR;
-          st->err = (n->state == FWUPD_ST_APP_RUNNING) ? PLC_CFG_ERR_NONE : PLC_CFG_ERR_IN_BOOT;
+          Cfg_Problem(&problems, HVAC_CHAIN_P_CONFIG, m.line, m.rail, m.place, m.type, m.type);
         }
-        else
-        {
-          st->state = PLC_CFG_MOD_MISSING;
-          st->version = 0u;
-          st->err = PLC_CFG_ERR_NONE;
-        }
-        break;
-
-      case HVAC_CAT_AI:
-        if (ai_k == 0u)
-        {
-          ai_k = 1u;
-          Cfg_CheckAi(i, &m, &h, st, now);
-        }
-        else
-        {
-          st->state = PLC_CFG_MOD_UNCHECKED;
-        }
-        break;
-
-      case HVAC_CAT_HUB_DISPLAYS:
-        st->state = PlcCan_HubBusOk() ? PLC_CFG_MOD_ON_BUS : PLC_CFG_MOD_MISSING;
-        break;
-
-      default:
-        st->state = PLC_CFG_MOD_UNCHECKED;
-        break;
+      }
+      else if (Cfg_FwupdType(m.type) != 0u)
+      {
+        st->state = PLC_CFG_MOD_OK;
+        st->err = PLC_CFG_ERR_NONE;
+      }
+      else
+      {
+        st->state = PLC_CFG_MOD_ON_BUS; /* found at its place, settings not supported yet */
+        st->err = PLC_CFG_ERR_NONE;
+      }
     }
 
-    if (st->state == PLC_CFG_MOD_MISSING || st->state == PLC_CFG_MOD_ERROR)
-    {
-      if (!any_err) { err_type = m.type; err_code = st->err; }
-      any_err = 1u;
-    }
     if (st->state == PLC_CFG_MOD_APPLYING) any_apply = 1u;
+    if ((st->state == PLC_CFG_MOD_MISSING || st->state == PLC_CFG_MOD_ERROR ||
+         st->state == PLC_CFG_MOD_WRONG_TYPE) && err_type == 0u)
+    {
+      err_type = m.type;
+      err_code = st->err;
+    }
   }
 
-  ai_fresh = (s_ai_seen != 0u && (now - s_ai_seen) < CFG_STATUS_FRESH_MS) ? 1u : 0u;
-  s_extra_loco = (nloco > loco_k) ? (uint8_t)(nloco - loco_k) : 0u;
-  s_extra_ai = (ai_fresh && ai_k == 0u) ? 1u : 0u;
-  if (s_extra_loco || s_extra_ai) any_err = 1u;
+  /* Found but not configured, then modules without ID outside the chain. */
+  s_extra_n = 0u;
+  s_extra_loco = 0u;
+  s_extra_ai = 0u;
+  if (!ids.busy && ids.walks != 0u)
+  {
+    PlcIdFound stray[PLC_ID_MAX_STRAY];
+    uint8_t nstray = PlcId_GetStray(stray, PLC_ID_MAX_STRAY);
 
-  state = any_err ? PLC_CFG_ST_ERRORS : (any_apply ? PLC_CFG_ST_APPLYING : PLC_CFG_ST_OK);
+    for (uint8_t k = 0u; k < nfound; k++)
+    {
+      if (used[k]) continue;
+      if (s_found[k].cat == HVAC_CAT_LOCOMOTIVE) s_extra_loco++;
+      if (s_found[k].cat == HVAC_CAT_AI) s_extra_ai++;
+      if (s_extra_n < PLC_CFG_MAX_EXTRA) s_extra[s_extra_n++] = s_found[k];
+      Cfg_Problem(&problems, HVAC_CHAIN_P_EXTRA, s_found[k].line, s_found[k].rail, s_found[k].place, 0u, s_found[k].cat);
+    }
+    for (uint8_t k = 0u; k < nstray; k++)
+    {
+      if (s_extra_n < PLC_CFG_MAX_EXTRA) s_extra[s_extra_n++] = stray[k];
+      Cfg_Problem(&problems, HVAC_CHAIN_P_EXTRA, stray[k].line, HVAC_ID_NONE, HVAC_ID_NONE, 0u, stray[k].cat);
+    }
+  }
+
+  state = problems ? PLC_CFG_ST_ERRORS : (any_apply ? PLC_CFG_ST_APPLYING : PLC_CFG_ST_OK);
+  s_chain[0] = problems ? HVAC_CHAIN_ST_ERROR : (any_apply ? HVAC_CHAIN_ST_BUSY : HVAC_CHAIN_ST_OK);
+  s_chain[1] = problems;
   if (state != s_state)
   {
     if (state == PLC_CFG_ST_OK)
@@ -372,7 +531,8 @@ static void Cfg_Evaluate(uint32_t now)
     }
     else if (state == PLC_CFG_ST_ERRORS)
     {
-      PlcFwupd_Log(PLC_FWUPD_EV_CFG_ERROR, 0u, err_type, err_code, 0u, 0u, s_gen);
+      PlcFwupd_Log(PLC_FWUPD_EV_CFG_ERROR, 0u, err_type ? err_type : s_chain[7], err_type ? err_code : 0u,
+                   s_chain[2], 0u, s_gen);
     }
     s_state = state;
   }
@@ -387,14 +547,96 @@ void PlcCfg_Setup(void)
 
 void PlcCfg_OnStatusIsr(const uint8_t d[8])
 {
-  memcpy((void *)s_ai_st, d, 8u);
-  s_ai_seen = osKernelGetTickCount();
-  if (s_ai_seen == 0u) s_ai_seen = 1u;
+  uint32_t now = osKernelGetTickCount();
+  int slot = -1;
+  int oldest = 0;
+
+  if (d[1] == HVAC_CFG_PLACE_ANY || d[2] == HVAC_CFG_PLACE_ANY) return; /* no ID yet */
+  if (now == 0u) now = 1u;
+  for (int i = 0; i < (int)CFG_STATUS_SLOTS; i++)
+  {
+    if (s_status[i].seen != 0u && s_status[i].rail == d[2] && s_status[i].place == d[1]) { slot = i; break; }
+    if (slot < 0 && s_status[i].seen == 0u) slot = i;
+    if (s_status[i].seen < s_status[oldest].seen) oldest = i;
+  }
+  if (slot < 0) slot = oldest;
+  s_status[slot].rail = d[2];
+  s_status[slot].place = d[1];
+  memcpy((void *)s_status[slot].d, d, 8u);
+  s_status[slot].seen = now;
+}
+
+uint8_t PlcCfg_Ready(void)
+{
+  return s_loaded;
+}
+
+/* Rails of the heads (locomotive, HUB) of one line in the configuration, ascending; k-th or 0. */
+uint8_t PlcCfg_HeadRail(uint8_t line, uint8_t k)
+{
+  uint8_t rails[HVAC_CFGF_MAX_MODULES];
+  uint8_t n = 0u;
+  uint8_t r = 0u;
+
+  if (osMutexAcquire(s_mx, 200u) != osOK) return 0u;
+  if (s_act_len > 0u)
+  {
+    HvacCfgHeader h;
+    Cfg_Header(s_act, &h);
+    for (uint16_t i = 0u; i < h.module_count; i++)
+    {
+      HvacCfgModule m;
+      Cfg_Module(s_act, i, &m);
+      if (m.line == line && m.place == 0u && m.rail != 0u &&
+          (m.type == HVAC_CAT_LOCOMOTIVE || m.type == HVAC_CAT_HUB_DISPLAYS))
+      {
+        uint8_t j = n++;
+        while (j > 0u && rails[j - 1u] > m.rail) { rails[j] = rails[j - 1u]; j--; }
+        rails[j] = m.rail;
+      }
+    }
+  }
+  osMutexRelease(s_mx);
+  if (k < n) r = rails[k];
+  return r;
+}
+
+uint8_t PlcCfg_MaxRail(void)
+{
+  uint8_t r = 0u;
+
+  if (osMutexAcquire(s_mx, 200u) != osOK) return 0u;
+  if (s_act_len > 0u)
+  {
+    HvacCfgHeader h;
+    Cfg_Header(s_act, &h);
+    for (uint16_t i = 0u; i < h.module_count; i++)
+    {
+      HvacCfgModule m;
+      Cfg_Module(s_act, i, &m);
+      if (m.rail > r && m.rail < HVAC_ID_NONE) r = m.rail;
+    }
+  }
+  osMutexRelease(s_mx);
+  return r;
 }
 
 void PlcCfg_Poll(void)
 {
   uint32_t now = osKernelGetTickCount();
+
+  /* Chain summary for the displays (also without a configuration: state NONE). */
+  if (s_loaded && (now - s_last_chain) >= HVAC_ID_CHAIN_MS)
+  {
+    uint8_t d[8];
+
+    s_last_chain = now;
+    taskENTER_CRITICAL();
+    memcpy(d, s_chain, 8u);
+    taskEXIT_CRITICAL();
+    if (s_act_len == 0u) memset(d, 0, sizeof(d));
+    (void)PlcCan_Send(PLC_CAN_BUS_HUB, HVAC_CAN_ID_CHAIN, 0u, d);
+  }
 
   if (!s_loaded)
   {
@@ -474,6 +716,7 @@ uint8_t PlcCfg_UploadEnd(uint8_t *gen_out)
   osMutexRelease(s_mx);
 
   PlcFwupd_Log(PLC_FWUPD_EV_CFG_SAVED, 0u, 0u, 0u, 0u, 0u, gen);
+  PlcId_RequestWalk(); /* rail numbers may have changed */
   if (gen_out != NULL) *gen_out = gen;
   return PLC_CFG_OK;
 }
@@ -504,7 +747,23 @@ void PlcCfg_GetSummary(PlcCfgSummary *out)
   out->resends = s_resends;
   out->extra_loco = s_extra_loco;
   out->extra_ai = s_extra_ai;
+  out->extra_count = s_extra_n;
+  out->problems = s_chain[1];
   osMutexRelease(s_mx);
+}
+
+uint8_t PlcCfg_GetExtra(uint8_t i, PlcIdFound *out)
+{
+  uint8_t ok = 0u;
+
+  if (osMutexAcquire(s_mx, 200u) != osOK) return 0u;
+  if (i < s_extra_n)
+  {
+    *out = s_extra[i];
+    ok = 1u;
+  }
+  osMutexRelease(s_mx);
+  return ok;
 }
 
 uint8_t PlcCfg_GetModule(uint16_t i, HvacCfgModule *m, PlcCfgModState *st)

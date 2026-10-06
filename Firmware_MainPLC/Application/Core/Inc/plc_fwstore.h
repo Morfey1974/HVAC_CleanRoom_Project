@@ -63,5 +63,7 @@ uint8_t FwStore_UploadActive(void);
 
 /* NEW -> CURRENT, old CURRENT -> BACKUP. */
 uint8_t FwStore_Promote(uint8_t type);
+/* BACKUP -> CURRENT, old CURRENT -> BACKUP. */
+uint8_t FwStore_Rollback(uint8_t type);
 
 #endif /* PLC_FWSTORE_H */

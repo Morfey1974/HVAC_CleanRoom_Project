@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { api, type PlcCfgMod, type PlcConfigIssue, type PlcConfigView } from '../../api/client';
+import { api, type PlcCfgMod, type PlcConfigIssue, type PlcConfigView, type PlcIdModule } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useProject } from '../../context/ProjectContext';
 import { useConfirm } from '../../components/Dialog';
@@ -11,6 +11,9 @@ const ST_OK = 1;
 const ST_MISSING = 2;
 const ST_ERROR = 3;
 const ST_APPLYING = 4;
+const ST_WRONG_TYPE = 6;
+/** Rail of a module that answers but is outside the identification chain. */
+const ID_NONE = 255;
 
 /** Catalogue type code -> system prefix, for PLC rows that do not match the project. */
 const PREFIX: Record<number, string> = {
@@ -19,6 +22,8 @@ const PREFIX: Record<number, string> = {
 
 const ver = (v: number) => (v ? `${v >> 8}.${v & 0xff}` : '—');
 const pad = (n: number) => n.toString().padStart(2, '0');
+const typeName = (type: number) => PREFIX[type] ?? `#${type}`;
+const hasTag = (tag?: string) => !!tag && !/^0+$/.test(tag);
 
 function duration(ms: number) {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -89,6 +94,19 @@ export function ExportPage() {
     }
   };
 
+  const findModules = async () => {
+    if (!token) return;
+    setError('');
+    setInfo('');
+    try {
+      const r = await api.idWalk(token);
+      if (r.ok) setInfo(t('plcConfig.walkStarted'));
+      else setError(errText(r.error, r.plcError));
+    } catch (e) {
+      setError(errText((e as Error).message));
+    }
+  };
+
   if (!view) {
     return (
       <div className="page">
@@ -111,7 +129,7 @@ export function ExportPage() {
         const own = view.matches ? b.modules[i] : undefined;
         return {
           key: i,
-          name: own?.systemName ?? PREFIX[m.type] ?? `#${m.type}`,
+          name: own?.systemName ?? typeName(m.type),
           id: own?.id ?? (m.type === 0x01 ? '0.00.00' : `${m.l}.${pad(m.r)}.${pad(m.p)}`),
           channels: own?.channels ?? 0,
           m,
@@ -189,9 +207,25 @@ export function ExportPage() {
                 <div className="small muted">{t('plcConfig.appliedAgo', { time: duration(plc.up - plc.applied) })}</div>
               )}
               {plc.resends > 0 && <div className="small muted">{t('plcConfig.resends', { count: plc.resends })}</div>}
-              {plc.extraLoco > 0 && <div className="small cfg-differs">{t('plcConfig.extraLoco', { count: plc.extraLoco })}</div>}
-              {plc.extraAi > 0 && <div className="small cfg-differs">{t('plcConfig.extraAi')}</div>}
+              {!plc.extra && plc.extraLoco > 0 && (
+                <div className="small cfg-differs">{t('plcConfig.extraLoco', { count: plc.extraLoco })}</div>
+              )}
+              {!plc.extra && plc.extraAi > 0 && <div className="small cfg-differs">{t('plcConfig.extraAi')}</div>}
+              {plc.walk && (
+                <div className="small muted">
+                  {plc.walk.busy
+                    ? t('plcConfig.walkBusy')
+                    : plc.walk.walks > 0
+                      ? t('plcConfig.walkInfo', { count: plc.walk.count, time: duration(plc.walk.age) })
+                      : t('plcConfig.walkNever')}
+                </div>
+              )}
             </>
+          )}
+          {view.online && plc?.walk && (
+            <button type="button" className="btn mt" disabled={!!plc.walk.busy} onClick={findModules}>
+              {t('plcConfig.findModules')}
+            </button>
           )}
         </div>
       </div>
@@ -206,6 +240,7 @@ export function ExportPage() {
                   <th>{t('plcConfig.module')}</th>
                   <th>ID</th>
                   <th>{t('plcConfig.status')}</th>
+                  <th>{t('plcConfig.board')}</th>
                   <th>{t('plcConfig.version')}</th>
                   <th>{t('plcConfig.channelsCol')}</th>
                   <th>{t('plcConfig.details')}</th>
@@ -213,15 +248,32 @@ export function ExportPage() {
               </thead>
               <tbody>
                 {rows.map((r) => (
-                  <tr key={r.key} className={r.m.st === ST_MISSING || r.m.st === ST_ERROR ? 'row-alarm' : ''}>
+                  <tr
+                    key={r.key}
+                    className={r.m.st === ST_MISSING || r.m.st === ST_ERROR || r.m.st === ST_WRONG_TYPE ? 'row-alarm' : ''}
+                  >
                     <td className="ltr-value">{r.name}</td>
                     <td className="ltr-value mono">{r.id}</td>
                     <td>
                       <span className={`cfg-st cfg-st--${r.m.st}`}>{t(`plcConfig.st.${r.m.st}`)}</span>
                     </td>
+                    <td className="ltr-value mono">{hasTag(r.m.tag) ? r.m.tag : '—'}</td>
                     <td className="ltr-value">{ver(r.m.ver)}</td>
                     <td className="ltr-value">{channelText(r.m, r.channels)}</td>
                     <td className="small">{details(r.m)}</td>
+                  </tr>
+                ))}
+                {(plc?.extra ?? []).map((e, i) => (
+                  <tr key={`x${i}`} className="row-alarm">
+                    <td className="ltr-value">{typeName(e.type)}</td>
+                    <td className="ltr-value mono">{placeText(e)}</td>
+                    <td>
+                      <span className="cfg-st cfg-st--3">{t('plcConfig.extra')}</span>
+                    </td>
+                    <td className="ltr-value mono">{hasTag(e.tag) ? e.tag : '—'}</td>
+                    <td />
+                    <td />
+                    <td className="small">{e.r === ID_NONE ? t('plcConfig.extraOutside') : t('plcConfig.extraHint')}</td>
                   </tr>
                 ))}
               </tbody>
@@ -232,8 +284,13 @@ export function ExportPage() {
     </div>
   );
 
+  function placeText(e: PlcIdModule) {
+    return e.r === ID_NONE ? t('plcConfig.outsideChain') : `${e.l}.${pad(e.r)}.${pad(e.p)}`;
+  }
+
   function details(m: PlcCfgMod) {
-    if (m.st === ST_ERROR) return t(`plcConfig.moduleErr.${m.err}`, { defaultValue: `#${m.err}` });
+    if (m.st === ST_WRONG_TYPE) return t('plcConfig.wrongType', { type: typeName(m.fc ?? 0) });
+    if (m.st === ST_ERROR || (m.st === ST_MISSING && m.err)) return t(`plcConfig.moduleErr.${m.err}`, { defaultValue: `#${m.err}` });
     if (m.st === ST_APPLYING) return t('plcConfig.stHint.4');
     return t(`plcConfig.stHint.${m.st}`, { defaultValue: '' });
   }

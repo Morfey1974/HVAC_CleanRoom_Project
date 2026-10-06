@@ -343,3 +343,35 @@ uint8_t FwStore_Promote(uint8_t type)
   FwStore_Unlock();
   return ok;
 }
+
+uint8_t FwStore_Rollback(uint8_t type)
+{
+  uint8_t ok;
+  int b = -1;
+  int c = -1;
+
+  if (type == 0u || type >= FWSTORE_TYPES) return 0u;
+  FwStore_Lock();
+  for (int i = 0; i < 2; i++)
+  {
+    if (s_slots[type][i].role == FWSTORE_ROLE_BACKUP) b = i;
+    if (s_slots[type][i].role == FWSTORE_ROLE_CURRENT) c = i;
+  }
+  ok = (b >= 0) ? 1u : 0u;
+  if (ok)
+  {
+    FwStoreSlot v = s_slots[type][b];
+
+    /* Power loss between the two writes leaves two CURRENT slots; FwStore_Resolve keeps the newer one. */
+    v.role = FWSTORE_ROLE_CURRENT;
+    ok = FwStore_WriteDesc(type, (uint8_t)b, &v);
+    if (ok && c >= 0)
+    {
+      v = s_slots[type][c];
+      v.role = FWSTORE_ROLE_BACKUP;
+      ok = FwStore_WriteDesc(type, (uint8_t)c, &v);
+    }
+  }
+  FwStore_Unlock();
+  return ok;
+}

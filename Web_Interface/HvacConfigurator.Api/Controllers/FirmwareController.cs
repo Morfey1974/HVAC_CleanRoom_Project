@@ -46,6 +46,17 @@ public class FirmwareController(FirmwareService firmware, PlcFirmwareClient plc)
         return Ok(await firmware.RunAsync(type, mode, reason, ct));
     }
 
+    [HttpPost("rollback")]
+    public async Task<IActionResult> Rollback([FromQuery] int type, [FromQuery] string? reason, CancellationToken ct)
+    {
+        if (type is < 1 or > FirmwareImage.MaxModuleType) return BadRequest(new { message = "bad_args" });
+        return Ok(await firmware.RollbackAsync(type, reason, ct));
+    }
+
+    /// <summary>New search of module places (IDs) on all lines.</summary>
+    [HttpPost("id-walk")]
+    public async Task<IActionResult> IdWalk(CancellationToken ct) => Ok(await firmware.IdWalkAsync(ct));
+
     [HttpPost("cancel")]
     public async Task<IActionResult> Cancel(CancellationToken ct) => Ok(await firmware.CancelAsync(ct));
 

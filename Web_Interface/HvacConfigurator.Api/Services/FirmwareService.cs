@@ -121,6 +121,41 @@ public class FirmwareService(AppDbContext db, AuditService audit, PlcFirmwareCli
         return result;
     }
 
+    public async Task<FirmwareSendResult> RollbackAsync(int moduleType, string? reason, CancellationToken ct)
+    {
+        FirmwareSendResult result;
+        try
+        {
+            using var doc = JsonDocument.Parse(await plc.RollbackAsync(moduleType, ct));
+            var root = doc.RootElement;
+            result = root.TryGetProperty("ok", out var ok) && ok.GetBoolean()
+                ? new FirmwareSendResult(true, null, null)
+                : new FirmwareSendResult(false, "plc_rejected", root.TryGetProperty("err", out var e) ? e.GetInt32() : null);
+        }
+        catch (PlcUnavailableException ex) { result = new FirmwareSendResult(false, ex.Code, null); }
+        catch (JsonException) { result = new FirmwareSendResult(false, "plc_bad_answer", null); }
+
+        audit.Add(result.Ok ? "firmware.rollback" : "firmware.rollback_failed", $"type {moduleType}",
+            reason: result.Ok ? reason : $"{result.Error}{(result.PlcError is { } pe ? $" ({pe})" : "")}");
+        await db.SaveChangesAsync(ct);
+        return result;
+    }
+
+    public async Task<FirmwareSendResult> IdWalkAsync(CancellationToken ct)
+    {
+        FirmwareSendResult result;
+        try
+        {
+            await plc.IdWalkAsync(ct);
+            result = new FirmwareSendResult(true, null, null);
+        }
+        catch (PlcUnavailableException ex) { result = new FirmwareSendResult(false, ex.Code, null); }
+
+        audit.Add("modules.id_walk", "plc", reason: result.Error);
+        await db.SaveChangesAsync(ct);
+        return result;
+    }
+
     public async Task<FirmwareSendResult> CancelAsync(CancellationToken ct)
     {
         FirmwareSendResult result;

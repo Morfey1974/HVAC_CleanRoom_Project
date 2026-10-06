@@ -1,5 +1,5 @@
 /*
- * plc_fwupd.c — Main PLC firmware update master on CAN1.
+ * plc_fwupd.c — Main PLC firmware update master on CAN1 and CAN2.
  */
 #include "plc_fwupd.h"
 
@@ -13,7 +13,7 @@
 #include "plc_can.h"
 
 #define PLC_FWUPD_CAN            (&hfdcan1)
-#define PLC_FWUPD_QUEUE_LEN      32u
+#define PLC_FWUPD_QUEUE_LEN      48u
 
 #define PLC_FWUPD_DISCOVER_MS    10000u
 #define PLC_FWUPD_LINK_MS        6000u
@@ -26,7 +26,7 @@
 #define PLC_FWUPD_VERIFY_TRIES   3u
 
 #define PLC_FWUPD_T_CONNECT_MS   1500u
-#define PLC_FWUPD_T_ERASE_MS     6000u
+#define PLC_FWUPD_T_ERASE_MS     30000u /* display (STM32H7): up to 6 sectors of 128 KB */
 #define PLC_FWUPD_T_BLOCK_MS     800u
 #define PLC_FWUPD_T_VERIFY_MS    3000u
 #define PLC_FWUPD_T_START_MS     1000u
@@ -37,6 +37,7 @@ typedef struct
 {
   uint32_t id;
   uint8_t  d[8];
+  uint8_t  bus;
 } FwFrame;
 
 volatile PlcFwupdStatus g_plc_fwupd;
@@ -49,6 +50,7 @@ static uint8_t s_blk[FWUPD_BLOCK_MAX] __attribute__((aligned(8)));
 
 static volatile uint8_t s_run_req_type;
 static volatile uint8_t s_run_req_mode;
+static volatile uint8_t s_run_req_rollback;
 static volatile uint8_t s_run_cancel;
 static FwStoreSlot s_run_img;
 
@@ -100,29 +102,46 @@ uint32_t PlcFwupd_GetLog(uint32_t after_id, PlcFwupdLog *out, uint32_t max)
 
 /* ---------- CAN ---------- */
 
-void PlcFwupd_OnRxIsr(uint32_t id, const uint8_t data[8])
+void PlcFwupd_OnRxIsr(uint8_t bus, uint32_t id, const uint8_t data[8])
 {
   FwFrame f;
 
   g_plc_fwupd.rx_frames++;
   if (s_q == NULL) return;
   f.id = id;
+  f.bus = bus;
   memcpy(f.d, data, 8u);
   if (osMessageQueuePut(s_q, &f, 0u, 0u) != osOK) g_plc_fwupd.rx_drop++;
 }
 
-static uint8_t Fw_Send(uint32_t type, uint32_t tag, const uint8_t d[8])
+static uint8_t Fw_SendBus(uint8_t bus, uint32_t id, const uint8_t d[8])
 {
   uint32_t t0 = osKernelGetTickCount();
 
-  if (HAL_FDCAN_GetState(PLC_FWUPD_CAN) != HAL_FDCAN_STATE_BUSY) return 0u;
-
-  while (!PlcCan_SendLoco(FWUPD_ID(type, tag), 1u, d))
+  while (!PlcCan_Send(bus, id, 1u, d))
   {
     if ((osKernelGetTickCount() - t0) >= PLC_FWUPD_T_TX_MS) return 0u;
     osDelay(1);
   }
   return 1u;
+}
+
+static int Fw_NodeIndex(uint32_t tag, uint8_t create);
+
+/* To one node: on the bus it announced on. To all nodes: on both buses. */
+static uint8_t Fw_Send(uint32_t type, uint32_t tag, const uint8_t d[8])
+{
+  int i;
+
+  if (HAL_FDCAN_GetState(PLC_FWUPD_CAN) != HAL_FDCAN_STATE_BUSY) return 0u;
+  if (tag == FWUPD_NODE_ALL)
+  {
+    uint8_t ok = Fw_SendBus(PLC_CAN_BUS_LOCO, FWUPD_ID(type, tag), d);
+    return (uint8_t)(Fw_SendBus(PLC_CAN_BUS_HUB, FWUPD_ID(type, tag), d) | ok);
+  }
+  i = Fw_NodeIndex(tag, 0u);
+  return Fw_SendBus((i >= 0 && g_plc_fwupd.nodes[i].bus == PLC_CAN_BUS_HUB) ? PLC_CAN_BUS_HUB : PLC_CAN_BUS_LOCO,
+                    FWUPD_ID(type, tag), d);
 }
 
 /* ---------- node table ---------- */
@@ -146,7 +165,7 @@ static int Fw_NodeIndex(uint32_t tag, uint8_t create)
   return free_i;
 }
 
-static void Fw_OnAnnounce(uint32_t tag, const uint8_t d[8])
+static void Fw_OnAnnounce(uint32_t tag, uint8_t bus, const uint8_t d[8])
 {
   int i = Fw_NodeIndex(tag, 1u);
   volatile PlcFwupdNode *n;
@@ -176,6 +195,7 @@ static void Fw_OnAnnounce(uint32_t tag, const uint8_t d[8])
   n->app_version = fwupd_get16(&d[4]);
   n->boot_fails = d[6];
   n->link = 1u;
+  n->bus = bus;
   n->last_seen = osKernelGetTickCount();
   n->version_mismatch = (n->state == FWUPD_ST_APP_RUNNING && FwStore_Find(n->module_type, FWSTORE_ROLE_CURRENT, &cur) &&
                          n->app_version != cur.version) ? 1u : 0u;
@@ -194,7 +214,7 @@ static void Fw_Record(const FwFrame *f)
 {
   if (FWUPD_ID_TYPE(f->id) == FWUPD_MSG_ANNOUNCE && FWUPD_ID_NODE(f->id) != FWUPD_NODE_ALL)
   {
-    Fw_OnAnnounce(FWUPD_ID_NODE(f->id), f->d);
+    Fw_OnAnnounce(FWUPD_ID_NODE(f->id), f->bus, f->d);
   }
 }
 
@@ -495,7 +515,21 @@ uint8_t PlcFwupd_RequestRun(uint8_t module_type, uint8_t mode)
   {
     return PLC_FWUPD_REQ_NO_IMAGE;
   }
+  s_run_req_rollback = 0u;
   s_run_req_mode = mode;
+  s_run_req_type = module_type;
+  return PLC_FWUPD_REQ_OK;
+}
+
+uint8_t PlcFwupd_RequestRollback(uint8_t module_type)
+{
+  FwStoreSlot img;
+
+  if (module_type == 0u || module_type >= FWSTORE_TYPES) return PLC_FWUPD_REQ_ARG;
+  if (g_plc_fwupd.run_active || s_run_req_type != 0u || FwStore_UploadActive()) return PLC_FWUPD_REQ_BUSY;
+  if (!FwStore_Find(module_type, FWSTORE_ROLE_BACKUP, &img)) return PLC_FWUPD_REQ_NO_BACKUP;
+  s_run_req_rollback = 1u;
+  s_run_req_mode = PLC_FWUPD_MODE_DIFFERENT;
   s_run_req_type = module_type;
   return PLC_FWUPD_REQ_OK;
 }
@@ -508,12 +542,16 @@ void PlcFwupd_Cancel(void)
 static void Fw_RunBegin(void)
 {
   uint8_t type = s_run_req_type;
+  uint8_t found = s_run_req_rollback
+                ? FwStore_Find(type, FWSTORE_ROLE_BACKUP, &s_run_img)
+                : (FwStore_Find(type, FWSTORE_ROLE_NEW, &s_run_img) || FwStore_Find(type, FWSTORE_ROLE_CURRENT, &s_run_img));
 
-  if (!FwStore_Find(type, FWSTORE_ROLE_NEW, &s_run_img) && !FwStore_Find(type, FWSTORE_ROLE_CURRENT, &s_run_img))
+  if (!found)
   {
     s_run_req_type = 0u;
     return;
   }
+  g_plc_fwupd.run_rollback = s_run_req_rollback;
   memset(s_run_done, 0, sizeof(s_run_done));
   s_run_cancel = 0u;
   g_plc_fwupd.run_type = type;
@@ -569,6 +607,13 @@ static void Fw_RunStep(void)
     if (FwStore_Promote(g_plc_fwupd.run_type))
     {
       PlcFwupd_Log(PLC_FWUPD_EV_PROMOTE, 0u, g_plc_fwupd.run_type, 0u, 0u, 0u, s_run_img.version);
+    }
+  }
+  else if (g_plc_fwupd.run_failed == 0u && s_run_img.role == FWSTORE_ROLE_BACKUP)
+  {
+    if (FwStore_Rollback(g_plc_fwupd.run_type))
+    {
+      PlcFwupd_Log(PLC_FWUPD_EV_ROLLBACK, 0u, g_plc_fwupd.run_type, 0u, 0u, 0u, s_run_img.version);
     }
   }
   PlcFwupd_Log(PLC_FWUPD_EV_RUN_END, 0u, g_plc_fwupd.run_type, g_plc_fwupd.run_failed, g_plc_fwupd.run_done,

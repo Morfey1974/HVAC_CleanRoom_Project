@@ -1853,7 +1853,8 @@ label.btn.disabled {
   color: var(--success);
 }
 .cfg-st--2,
-.cfg-st--3 {
+.cfg-st--3,
+.cfg-st--6 {
   color: var(--error);
 }
 .cfg-st--4 {

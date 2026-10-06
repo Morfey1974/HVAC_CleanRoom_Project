@@ -15,10 +15,11 @@
 
 #include <stdint.h>
 
-/* Channel setting, PLC -> module, DLC 8.
- *   [0]    target place on the rail (1..31), HVAC_CFG_PLACE_ANY = every module of the bus
- *   [1]    channel, 1..N
- *   [2]    signal, HVAC_SIG_*
+/* Channel setting, PLC -> module, DLC 8. The module takes it only if place and rail are its own
+ * place ID (hvac_id.h); a module without an ID ignores it and keeps its previous settings.
+ *   [0]    target place on the rail (1..31)
+ *   [1]    target rail (1..30)
+ *   [2]    channel (1..15) << 4 | signal HVAC_SIG_*
  *   [3]    configuration generation (1..255)
  *   [4..5] value at the bottom of the signal, int16 little-endian, 0.1 units
  *   [6..7] value at the top of the signal,    int16 little-endian, 0.1 units
@@ -28,12 +29,13 @@
 
 /* Module configuration status, module -> PLC, DLC 8, every HVAC_CFG_STATUS_MS and after each CFG_SET.
  *   [0]    module type, FWUPD_TYPE_* (fwupd_proto.h)
- *   [1]    place on the rail, HVAC_CFG_PLACE_ANY if unknown
- *   [2..3] application version, major << 8 | minor
- *   [4]    configuration generation of the last CFG_SET, 0 = defaults since power-up
- *   [5]    channels accepted, bit N-1 = channel N
- *   [6]    channels rejected, bit N-1 = channel N
- *   [7]    last error, HVAC_CFG_E_*
+ *   [1]    place on the rail, HVAC_CFG_PLACE_ANY if no ID
+ *   [2]    rail, HVAC_CFG_PLACE_ANY if no ID
+ *   [3]    configuration generation of the last CFG_SET, 0 = defaults since power-up
+ *   [4]    channels accepted, bit N-1 = channel N
+ *   [5]    channels rejected, bit N-1 = channel N
+ *   [6]    last error, HVAC_CFG_E_*
+ *   [7]    reserved, 0
  */
 #define HVAC_CAN_ID_CFG_STATUS    0x331u
 

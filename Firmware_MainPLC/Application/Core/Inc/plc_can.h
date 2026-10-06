@@ -37,8 +37,13 @@ void PlcCan_Task(void);
 /* Thread-safe copy of the gateway state, for the web page. */
 void PlcCan_GetSnapshot(PlcAiSnapshot *out);
 
+#define PLC_CAN_BUS_LOCO  1u /* CAN1: locomotives and their rails, ID line 1 */
+#define PLC_CAN_BUS_HUB   2u /* CAN2: HUBs of displays, ID line 2 */
+
 /* Queues one CAN1 frame from any thread (shared with plc_fwupd); returns 1 if queued. */
 uint8_t PlcCan_SendLoco(uint32_t id, uint8_t is_ext, const uint8_t d[8]);
+/* Same for either bus (PLC_CAN_BUS_*), DLC 8. */
+uint8_t PlcCan_Send(uint8_t bus, uint32_t id, uint8_t is_ext, const uint8_t d[8]);
 
 /* 1: CAN2 frames are acknowledged by someone (not error-passive, not bus-off). */
 uint8_t PlcCan_HubBusOk(void);

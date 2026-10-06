@@ -1,5 +1,5 @@
 /*
- * plc_fwupd.h — Main PLC firmware update master on CAN1 (Locomotive bus).
+ * plc_fwupd.h — Main PLC firmware update master on CAN1 (locomotives, rail modules) and CAN2 (HUBs, displays).
  *
  * Concept: Docs/Firmware_Update_Concept.md. Protocol: Shared_Libs/fwupd/fwupd_proto.h.
  * Images: plc_fwstore.h (W25Q128), uploaded from the HVAC application over Ethernet.
@@ -17,13 +17,14 @@
  *
  * Update run (command from the HVAC application): all linked nodes of one type get the NEW
  * image (or CURRENT if there is no NEW), one by one. If every node succeeded, NEW becomes CURRENT.
+ * Rollback run: the same with the BACKUP image; if every node succeeded, BACKUP and CURRENT swap.
  */
 #ifndef PLC_FWUPD_H
 #define PLC_FWUPD_H
 
 #include <stdint.h>
 
-#define PLC_FWUPD_MAX_NODES     8u
+#define PLC_FWUPD_MAX_NODES     24u
 #define PLC_FWUPD_LOG_LEN       32u
 
 #define PLC_FWUPD_RES_NONE      0u
@@ -52,6 +53,7 @@
 #define PLC_FWUPD_REQ_BUSY      1u
 #define PLC_FWUPD_REQ_NO_IMAGE  2u
 #define PLC_FWUPD_REQ_ARG       3u
+#define PLC_FWUPD_REQ_NO_BACKUP 4u
 
 /* Log events */
 #define PLC_FWUPD_EV_NODE_NEW    1u
@@ -72,6 +74,8 @@
 #define PLC_FWUPD_EV_CFG_OK      15u /* every checkable module confirmed the configuration */
 #define PLC_FWUPD_EV_CFG_ERROR   16u /* module_type = catalogue type, err = PLC_CFG_ERR_* / HVAC_CFG_E_* */
 #define PLC_FWUPD_EV_CFG_RESEND  17u /* module reported another generation, settings sent again */
+#define PLC_FWUPD_EV_ROLLBACK    18u /* BACKUP became CURRENT after a rollback run */
+#define PLC_FWUPD_EV_ID_WALK     19u /* identification walk (plc_id): ver_from = modules found, err = problems */
 
 typedef struct
 {
@@ -90,6 +94,7 @@ typedef struct
   uint8_t  last_err;         /* FWUPD_ERR_* or PLC_FWUPD_E_* of the last failure */
   uint8_t  last_step;        /* PLC_FWUPD_STEP_* where it failed */
   uint8_t  learned;          /* 1: seen during the learning window after PLC start */
+  uint8_t  bus;              /* 1 = CAN1, 2 = CAN2 */
   uint32_t last_seen;        /* tick */
 } PlcFwupdNode;
 
@@ -116,6 +121,7 @@ typedef struct
   uint16_t run_version;
   uint8_t  run_done;         /* nodes processed in this run */
   uint8_t  run_failed;
+  uint8_t  run_rollback;     /* 1: the run sends the BACKUP image */
   uint8_t  busy;             /* a node is being updated */
   uint32_t busy_tag;
   uint8_t  step;             /* PLC_FWUPD_STEP_* */
@@ -133,11 +139,13 @@ extern volatile uint32_t g_plc_fwupd_block_delay_ms; /* test only: pause after e
 /* Creates the queue, the store mutexes and fwupdTask. Call before the scheduler starts. */
 void PlcFwupd_Start(void);
 
-/* From the CAN1 RX interrupt: extended data frame. */
-void PlcFwupd_OnRxIsr(uint32_t id, const uint8_t data[8]);
+/* From the CAN RX interrupt: extended data frame, bus 1 = CAN1, 2 = CAN2. */
+void PlcFwupd_OnRxIsr(uint8_t bus, uint32_t id, const uint8_t data[8]);
 
 /* Update run for one module type (PLC_FWUPD_MODE_*). */
 uint8_t PlcFwupd_RequestRun(uint8_t module_type, uint8_t mode);
+/* Rollback run: nodes of the type whose version differs from the BACKUP image get it. */
+uint8_t PlcFwupd_RequestRollback(uint8_t module_type);
 /* Stops the run after the node in progress. */
 void PlcFwupd_Cancel(void);
 

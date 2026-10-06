@@ -40,24 +40,36 @@ _estack = ORIGIN(RAM_D1) + LENGTH(RAM_D1);    /* end of RAM */
 _Min_Heap_Size = 0x200;      /* required amount of heap  */
 _Min_Stack_Size = 0x400; /* required amount of stack */
 
-/* Specify the memory areas */
+/* Specify the memory areas
+ * HVAC layout for STM32H723ZG (1M flash, 128K sectors), shared with the bootloader linker script:
+ *   0x08000000..0x0801FFFF  bootloader (sector 0)
+ *   0x08020000..0x080DFFFF  application (this image, sectors 1..6)
+ *   0x080E0000..0x080FFFFF  boot metadata (sector 7)
+ *   last 16 bytes of DTCM   _fwupd_shared (bootloader <-> application), never touched by startup code
+ */
 MEMORY
 {
   ITCMRAM (xrw)    : ORIGIN = 0x00000000,   LENGTH = 64K
-  DTCMRAM (xrw)    : ORIGIN = 0x20000000,   LENGTH = 128K
-  FLASH    (rx)    : ORIGIN = 0x08000000,   LENGTH = 1024K
+  DTCMRAM (xrw)    : ORIGIN = 0x20000000,   LENGTH = 128K - 16
+  FLASH    (rx)    : ORIGIN = 0x08020000,   LENGTH = 768K
   RAM_D1  (xrw)    : ORIGIN = 0x24000000,   LENGTH = 320K
   RAM_D2  (xrw)    : ORIGIN = 0x30000000,   LENGTH = 32K
   RAM_D3  (xrw)    : ORIGIN = 0x38000000,   LENGTH = 16K
 }
 
+_fwupd_shared = ORIGIN(DTCMRAM) + LENGTH(DTCMRAM);
+
 /* Define output sections */
 SECTIONS
 {
-  /* The startup code goes first into FLASH */
+  /* Image start: SP + reset handler for the bootloader, FWUPD header at 0x100,
+   * vector table at 0x400 (VTOR alignment, the table is longer than 0x100). */
   .isr_vector :
   {
-    . = ALIGN(4);
+    KEEP(*(.boot_vec))
+    . = 0x100;           /* FWUPD_HEADER_OFFSET */
+    KEEP(*(.fw_header))
+    . = 0x400;           /* DISP_APP_VTOR - application start */
     KEEP(*(.isr_vector)) /* Startup code */
     . = ALIGN(4);
   } >FLASH
@@ -137,7 +149,10 @@ SECTIONS
 
     . = ALIGN(4);
     _edata = .;        /* define a global symbol at data end */
+    . = ALIGN(8);      /* image length multiple of 8 for the update protocol */
   } >RAM_D1 AT> FLASH
+
+  _fw_image_end = LOADADDR(.data) + SIZEOF(.data); /* first byte after the image in flash */
 
   /* Uninitialized data section */
   . = ALIGN(4);

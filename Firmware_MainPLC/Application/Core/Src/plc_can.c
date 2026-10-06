@@ -11,6 +11,7 @@
 #include "plc_modbus.h"
 #include "plc_fwupd.h"
 #include "plc_cfg.h"
+#include "plc_id.h"
 
 #define PLC_CAN_LOCO        (&hfdcan1)
 #define PLC_CAN_HUB         (&hfdcan2)
@@ -32,19 +33,18 @@ static HAL_StatusTypeDef PlcCan_Start(void)
 {
   FDCAN_FilterTypeDef f = {0};
 
+  /* One standard filter (CubeMX: 1 on FDCAN1): AI_MEAS .. ID_HERE, the ISR picks the IDs it needs. */
   f.IdType = FDCAN_STANDARD_ID;
   f.FilterIndex = 0;
-  f.FilterType = FDCAN_FILTER_DUAL;
+  f.FilterType = FDCAN_FILTER_RANGE;
   f.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
   f.FilterID1 = HVAC_CAN_ID_AI_MEAS;
-  f.FilterID2 = HVAC_CAN_ID_CFG_STATUS;
+  f.FilterID2 = HVAC_CAN_ID_ID_HERE;
   if (HAL_FDCAN_ConfigFilter(PLC_CAN_LOCO, &f) != HAL_OK) return HAL_ERROR;
-  /* Extended IDs on CAN1 = firmware update protocol (plc_fwupd). */
+  /* Extended IDs = firmware update protocol (plc_fwupd) on both buses. */
   if (HAL_FDCAN_ConfigGlobalFilter(PLC_CAN_LOCO, FDCAN_REJECT, FDCAN_ACCEPT_IN_RX_FIFO0,
                                    FDCAN_REJECT_REMOTE, FDCAN_REJECT_REMOTE) != HAL_OK) return HAL_ERROR;
-
-  /* HUB side: nothing is processed yet, frames are only counted. */
-  if (HAL_FDCAN_ConfigGlobalFilter(PLC_CAN_HUB, FDCAN_ACCEPT_IN_RX_FIFO0, FDCAN_REJECT,
+  if (HAL_FDCAN_ConfigGlobalFilter(PLC_CAN_HUB, FDCAN_ACCEPT_IN_RX_FIFO0, FDCAN_ACCEPT_IN_RX_FIFO0,
                                    FDCAN_REJECT_REMOTE, FDCAN_REJECT_REMOTE) != HAL_OK) return HAL_ERROR;
 
   if (HAL_FDCAN_ActivateNotification(PLC_CAN_LOCO, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0) != HAL_OK) return HAL_ERROR;
@@ -55,22 +55,32 @@ static HAL_StatusTypeDef PlcCan_Start(void)
   return HAL_OK;
 }
 
-static uint8_t PlcCan_SendHubId(uint32_t id, uint32_t dlc, const uint8_t *d)
+static uint8_t PlcCan_Put(FDCAN_HandleTypeDef *can, uint32_t id, uint8_t is_ext, uint32_t dlc, const uint8_t *d)
 {
   FDCAN_TxHeaderTypeDef h = {0};
+  uint8_t ok = 0u;
 
+  if (HAL_FDCAN_GetState(can) != HAL_FDCAN_STATE_BUSY) return 0u;
   h.Identifier = id;
-  h.IdType = FDCAN_STANDARD_ID;
+  h.IdType = is_ext ? FDCAN_EXTENDED_ID : FDCAN_STANDARD_ID;
   h.TxFrameType = FDCAN_DATA_FRAME;
   h.DataLength = dlc;
   h.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
   h.BitRateSwitch = FDCAN_BRS_OFF;
   h.FDFormat = FDCAN_CLASSIC_CAN;
   h.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
-  h.MessageMarker = 0;
 
-  if (HAL_FDCAN_GetTxFifoFreeLevel(PLC_CAN_HUB) == 0u) return 0u;
-  return (HAL_FDCAN_AddMessageToTxFifoQ(PLC_CAN_HUB, &h, (uint8_t *)d) == HAL_OK) ? 1u : 0u;
+  /* Several tasks write each bus: the free-level check and the FIFO put must not interleave. */
+  taskENTER_CRITICAL();
+  if (HAL_FDCAN_GetTxFifoFreeLevel(can) > 0u &&
+      HAL_FDCAN_AddMessageToTxFifoQ(can, &h, (uint8_t *)d) == HAL_OK) ok = 1u;
+  taskEXIT_CRITICAL();
+  return ok;
+}
+
+static uint8_t PlcCan_SendHubId(uint32_t id, uint32_t dlc, const uint8_t *d)
+{
+  return PlcCan_Put(PLC_CAN_HUB, id, 0u, dlc, d);
 }
 
 static uint8_t PlcCan_SendHub(const uint8_t d[8])
@@ -118,8 +128,12 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
       {
         if (rh.RxFrameType == FDCAN_DATA_FRAME && rh.DataLength == FDCAN_DLC_BYTES_8)
         {
-          PlcFwupd_OnRxIsr(rh.Identifier, f.data);
+          PlcFwupd_OnRxIsr(PLC_CAN_BUS_LOCO, rh.Identifier, f.data);
         }
+      }
+      else if (rh.Identifier == HVAC_CAN_ID_ID_HERE && rh.DataLength == FDCAN_DLC_BYTES_8)
+      {
+        PlcId_OnHereIsr(PLC_CAN_BUS_LOCO, f.data);
       }
       else if (rh.IdType == FDCAN_STANDARD_ID && rh.Identifier == HVAC_CAN_ID_AI_MEAS &&
           rh.DataLength == FDCAN_DLC_BYTES_8)
@@ -135,6 +149,17 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
     else if (hfdcan == PLC_CAN_HUB)
     {
       s_rx_hub++;
+      if (rh.IdType == FDCAN_EXTENDED_ID)
+      {
+        if (rh.RxFrameType == FDCAN_DATA_FRAME && rh.DataLength == FDCAN_DLC_BYTES_8)
+        {
+          PlcFwupd_OnRxIsr(PLC_CAN_BUS_HUB, rh.Identifier, f.data);
+        }
+      }
+      else if (rh.Identifier == HVAC_CAN_ID_ID_HERE && rh.DataLength == FDCAN_DLC_BYTES_8)
+      {
+        PlcId_OnHereIsr(PLC_CAN_BUS_HUB, f.data);
+      }
     }
   }
 }
@@ -150,25 +175,12 @@ void PlcCan_GetSnapshot(PlcAiSnapshot *out)
 
 uint8_t PlcCan_SendLoco(uint32_t id, uint8_t is_ext, const uint8_t d[8])
 {
-  FDCAN_TxHeaderTypeDef h = {0};
-  uint8_t ok = 0u;
+  return PlcCan_Put(PLC_CAN_LOCO, id, is_ext, FDCAN_DLC_BYTES_8, d);
+}
 
-  if (HAL_FDCAN_GetState(PLC_CAN_LOCO) != HAL_FDCAN_STATE_BUSY) return 0u;
-  h.Identifier = id;
-  h.IdType = is_ext ? FDCAN_EXTENDED_ID : FDCAN_STANDARD_ID;
-  h.TxFrameType = FDCAN_DATA_FRAME;
-  h.DataLength = FDCAN_DLC_BYTES_8;
-  h.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
-  h.BitRateSwitch = FDCAN_BRS_OFF;
-  h.FDFormat = FDCAN_CLASSIC_CAN;
-  h.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
-
-  /* Two tasks write CAN1: the free-level check and the FIFO put must not interleave. */
-  taskENTER_CRITICAL();
-  if (HAL_FDCAN_GetTxFifoFreeLevel(PLC_CAN_LOCO) > 0u &&
-      HAL_FDCAN_AddMessageToTxFifoQ(PLC_CAN_LOCO, &h, (uint8_t *)d) == HAL_OK) ok = 1u;
-  taskEXIT_CRITICAL();
-  return ok;
+uint8_t PlcCan_Send(uint8_t bus, uint32_t id, uint8_t is_ext, const uint8_t d[8])
+{
+  return PlcCan_Put((bus == PLC_CAN_BUS_HUB) ? PLC_CAN_HUB : PLC_CAN_LOCO, id, is_ext, FDCAN_DLC_BYTES_8, d);
 }
 
 uint8_t PlcCan_HubBusOk(void)

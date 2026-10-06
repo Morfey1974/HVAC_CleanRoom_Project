@@ -41,12 +41,20 @@ _estack = ORIGIN(RAM) + LENGTH(RAM); /* end of "RAM" Ram type memory */
 _Min_Heap_Size = 0x200; /* required amount of heap */
 _Min_Stack_Size = 0x400; /* required amount of stack */
 
-/* Memories definition */
+/* Memories definition
+ * HVAC layout for STM32G0B1xB (128K flash), shared with the bootloader linker script:
+ *   0x08000000..0x08003FFF  bootloader (16K)
+ *   0x08004000..0x0801F7FF  application (this image, 110K)
+ *   0x0801F800..0x0801FFFF  boot metadata page
+ *   last 16 bytes of RAM    _fwupd_shared (bootloader <-> application), never touched by startup code
+ */
 MEMORY
 {
-  RAM    (xrw)    : ORIGIN = 0x20000000,   LENGTH = 144K
-  FLASH    (rx)    : ORIGIN = 0x8000000,   LENGTH = 128K
+  RAM    (xrw)    : ORIGIN = 0x20000000,   LENGTH = 144K - 16
+  FLASH    (rx)    : ORIGIN = 0x8004000,   LENGTH = 110K
 }
+
+_fwupd_shared = ORIGIN(RAM) + LENGTH(RAM);
 
 /* Sections */
 SECTIONS
@@ -57,6 +65,8 @@ SECTIONS
   {
     . = ALIGN(4);
     KEEP(*(.isr_vector)) /* Startup code */
+    . = 0x100;           /* FWUPD_HEADER_OFFSET */
+    KEEP(*(.fw_header))  /* image header for the bootloader */
     . = ALIGN(4);
   } >FLASH
 
@@ -146,8 +156,11 @@ SECTIONS
 
     . = ALIGN(4);
     _edata = .;        /* define a global symbol at data end */
+    . = ALIGN(8);      /* image length multiple of 8 for double-word programming */
 
   } >RAM AT> FLASH
+
+  _fw_image_end = LOADADDR(.data) + SIZEOF(.data); /* first byte after the image in flash */
 
   /* Uninitialized data section into "RAM" Ram type memory */
   . = ALIGN(4);

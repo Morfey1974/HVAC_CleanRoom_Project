@@ -12,6 +12,9 @@ const MODE_ALL = 2;
 const ROLE_CURRENT = 1;
 const ROLE_NEW = 2;
 const ROLE_BACKUP = 3;
+const EV_CFG_FIRST = 14;
+const EV_ROLLBACK = 18;
+const EV_ID_WALK = 19;
 
 const ver = (v: number) => `${v >> 8}.${v & 0xff}`;
 
@@ -150,6 +153,20 @@ export function FirmwareTab() {
     if (r && !r.ok) setError(r.error === 'plc_rejected' && r.plcError != null ? t(`firmware.runErrors.${r.plcError}`) : resultText(r));
   };
 
+  const rollback = async (type: number, backupVer: number) => {
+    if (!token) return;
+    const reason = await confirm({
+      title: t('firmware.rollback'),
+      message: t('firmware.confirmRollback', { type: typeName(type), ver: ver(backupVer) }),
+      confirmText: t('firmware.rollback'),
+      danger: true,
+      reason: 'optional',
+    });
+    if (reason === null) return;
+    const r = await run(`rb:${type}`, () => api.rollbackFirmware(token, type, reason || undefined));
+    if (r && !r.ok) setError(r.error === 'plc_rejected' && r.plcError != null ? t(`firmware.runErrors.${r.plcError}`) : resultText(r));
+  };
+
   const cancel = async () => {
     if (!token) return;
     const r = await run('cancel', () => api.cancelFirmware(token));
@@ -237,7 +254,9 @@ export function FirmwareTab() {
         <div className="card info-card">
           <div className="toolbar">
             <div>
-              <strong>{t('firmware.runActive', { type: typeName(plc.run.type), ver: ver(plc.run.ver) })}</strong>
+              <strong>
+                {t(plc.run.rollback ? 'firmware.rollbackActive' : 'firmware.runActive', { type: typeName(plc.run.type), ver: ver(plc.run.ver) })}
+              </strong>
               <div className="muted">{t('firmware.runCounts', { done: plc.run.done, failed: plc.run.failed })}</div>
             </div>
             <button type="button" className="btn btn-danger" disabled={busy === 'cancel'} onClick={cancel}>
@@ -299,6 +318,16 @@ export function FirmwareTab() {
                         >
                           {t('firmware.run')}
                         </button>
+                        {bak && (
+                          <button
+                            type="button"
+                            className="btn btn-small"
+                            disabled={runActive || !!busy || status?.uploading || status?.stale}
+                            onClick={() => rollback(type, bak.ver)}
+                          >
+                            {t('firmware.rollback')}
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -406,7 +435,11 @@ export function FirmwareTab() {
                     <td className="ltr-value">
                       {e.ev === 3
                         ? `${t(`firmware.states.${e.from}`)} → ${t(`firmware.states.${e.to}`)}`
-                        : [
+                        : e.ev === EV_ID_WALK
+                          ? t('firmware.walkFound', { count: e.from })
+                          : e.ev >= EV_CFG_FIRST && e.ev < EV_ROLLBACK
+                            ? ''
+                            : [
                             !e.from || e.from === e.to ? (e.to ? ver(e.to) : '') : `${ver(e.from)} → ${e.to ? ver(e.to) : ''}`,
                             e.ev === 6 ? t('firmware.resultFail', {
                               err: t(`firmware.nodeErrors.${e.err}`, { defaultValue: `0x${e.err.toString(16)}` }),
