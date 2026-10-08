@@ -431,6 +431,59 @@ export type PlcFwState = {
 
 export type PlcFwStatus = { online: boolean; stale: boolean; uploading: boolean; error: string | null; plc: PlcFwState | null };
 
+export type HmiGroup = 'section' | 'equipment' | 'room' | 'instrument';
+export const hmiGroups: HmiGroup[] = ['section', 'equipment', 'room', 'instrument'];
+export type HmiStatus = 'draft' | 'approved';
+export type HmiDrive = 'manual' | 'motor';
+/** Picture options; for a motorised damper also the actuator wiring (supply, control input, feedback output). */
+export type HmiParams = { label?: string; stages?: number; drive?: HmiDrive; supply?: string; control?: string; feedback?: string };
+
+export type HmiElement = {
+  id: string;
+  code: string;
+  group: HmiGroup;
+  kind: string;
+  art: string;
+  name: LocalizedText;
+  description: string;
+  length: number;
+  params: HmiParams;
+  status: HmiStatus;
+  version: number;
+  isArchived: boolean;
+  updatedBy: string;
+  updatedAt: string;
+  usedInScreens: number;
+};
+
+export type HmiElementSave = Omit<HmiElement, 'id' | 'version' | 'isArchived' | 'updatedBy' | 'updatedAt' | 'usedInScreens'> & {
+  reason?: string;
+};
+
+export type HmiScreenKind = 'ahu' | 'rooms';
+
+/** Copy of a library element inside an AHU screen; version shows which library edition it came from. */
+export type HmiAhuItem = {
+  uid: string;
+  elementId: string;
+  version: number;
+  code: string;
+  kind: string;
+  art: string;
+  length: number;
+  params: HmiParams;
+  name: LocalizedText;
+  bind: Record<string, string>;
+};
+
+export type HmiRoomItem = { roomId: string; bind: { t?: string; rh?: string; dp?: string } };
+
+export type HmiScreenContent = { items?: HmiAhuItem[]; flowTag?: string; rooms?: HmiRoomItem[] };
+
+export type HmiScreen = { id: string; kind: HmiScreenKind; name: LocalizedText; sortOrder: number; content: HmiScreenContent; updatedAt: string };
+
+export type HmiScreenSave = { kind: HmiScreenKind; name: LocalizedText; sortOrder: number; content: HmiScreenContent; reason?: string };
+
 const json = (body: unknown) => JSON.stringify(body);
 const q = (reason?: string) => (reason ? `reason=${encodeURIComponent(reason)}` : '');
 const P = (pid: string) => `/api/projects/${pid}`;
@@ -510,6 +563,20 @@ export const api = {
     request<LibraryItem>(`/api/library/${id}`, { method: 'PUT', body: json(i) }, t),
   archiveLibraryItem: (t: string, id: string, value: boolean, reason?: string) =>
     request<LibraryItem>(`/api/library/${id}/archive?value=${value}&${q(reason)}`, { method: 'POST' }, t),
+
+  hmiElements: (t: string, archived = false) => request<HmiElement[]>(`/api/hmi/elements?archived=${archived}`, {}, t),
+  createHmiElement: (t: string, e: HmiElementSave) => request<HmiElement>('/api/hmi/elements', { method: 'POST', body: json(e) }, t),
+  updateHmiElement: (t: string, id: string, e: HmiElementSave) =>
+    request<HmiElement>(`/api/hmi/elements/${id}`, { method: 'PUT', body: json(e) }, t),
+  archiveHmiElement: (t: string, id: string, value: boolean, reason?: string) =>
+    request<HmiElement>(`/api/hmi/elements/${id}/archive?value=${value}&${q(reason)}`, { method: 'POST' }, t),
+  hmiScreens: (t: string, pid: string) => request<HmiScreen[]>(`${P(pid)}/hmi-screens`, {}, t),
+  createHmiScreen: (t: string, pid: string, s: HmiScreenSave) =>
+    request<HmiScreen>(`${P(pid)}/hmi-screens`, { method: 'POST', body: json(s) }, t),
+  updateHmiScreen: (t: string, pid: string, id: string, s: HmiScreenSave) =>
+    request<HmiScreen>(`${P(pid)}/hmi-screens/${id}`, { method: 'PUT', body: json(s) }, t),
+  deleteHmiScreen: (t: string, pid: string, id: string, reason?: string) =>
+    request<void>(`${P(pid)}/hmi-screens/${id}?${q(reason)}`, { method: 'DELETE' }, t),
 
   audit: (t: string, offset: number, limit: number, projectId?: string) =>
     request<{ items: AuditEntry[]; total: number }>(

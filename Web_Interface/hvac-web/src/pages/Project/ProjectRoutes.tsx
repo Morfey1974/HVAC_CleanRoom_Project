@@ -16,12 +16,12 @@ import { StubPage } from './StubPage';
 import { HardwarePage } from './HardwarePage';
 import { SchemePage } from './SchemePage';
 import { ExportPage } from './ExportPage';
+import { HmiScreensPage } from './HmiScreensPage';
 
 const stubs: { path: string; minRole: Role }[] = [
   { path: 'signals', minRole: 'Engineer' },
   { path: 'binding', minRole: 'Engineer' },
   { path: 'regulators', minRole: 'Engineer' },
-  { path: 'mnemo', minRole: 'Engineer' },
   { path: 'commissioning', minRole: 'Engineer' },
 ];
 
@@ -45,6 +45,7 @@ export function ProjectRoutes() {
       <Route path="equipment" element={<EquipmentPage />} />
       <Route path="hardware" element={guard('Engineer', <HardwarePage />)} />
       <Route path="scheme" element={guard('Engineer', <SchemePage />)} />
+      <Route path="mnemo" element={guard('Engineer', <HmiScreensPage />)} />
       <Route path="monitoring" element={<MonitoringPage />} />
       <Route path="alarms" element={<AlarmsPage />} />
       <Route path="journal" element={guard('Engineer', <JournalPage />)} />

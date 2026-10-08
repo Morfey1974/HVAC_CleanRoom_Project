@@ -17,6 +17,13 @@ Start-Sleep 1
 Start-Process powershell -WindowStyle Minimized -WorkingDirectory (Join-Path $root 'HvacConfigurator.Api') `
     -ArgumentList '-NoExit', '-Command', "`$Host.UI.RawUI.WindowTitle='HVAC API'; dotnet run"
 
+$webUrl = 'http://localhost:5180'
+if (-not (Test-Url $webUrl)) {
+    Start-Process powershell -WindowStyle Minimized -WorkingDirectory (Join-Path $root 'hvac-web') `
+        -ArgumentList '-NoExit', '-Command', "`$Host.UI.RawUI.WindowTitle='HVAC Web'; npm run dev"
+    Write-Host 'Web: started'
+}
+
 for ($i = 0; $i -lt 120; $i++) {
     if (Test-Url $apiUrl) { Write-Host 'API: ready'; exit 0 }
     Start-Sleep 1

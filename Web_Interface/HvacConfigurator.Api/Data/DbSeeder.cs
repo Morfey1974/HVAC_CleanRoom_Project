@@ -63,6 +63,94 @@ public static class DbSeeder
         await RenameOwnManufacturerAsync(db);
         await RemoveObsoleteArticlesAsync(db);
         await SeedChannelModesAsync(db);
+        await SeedHmiAsync(db);
+    }
+
+    private static LocalizedText L(string ru, string en, string he) => new() { Ru = ru, En = en, He = he };
+
+    /// <summary>First HMI library content from NanoMotion 26000017 (plan 5.7) and the demo project screens.</summary>
+    private static async Task SeedHmiAsync(AppDbContext db)
+    {
+        {
+            HmiElement E(string code, string group, string art, LocalizedText name, int len, object? prm = null, bool draft = false) => new()
+            {
+                Code = code, Group = group, Kind = art, Art = art, Name = name, Length = len,
+                ParamsJson = JsonSerializer.Serialize(prm ?? new { }, Localized.Json),
+                Status = draft ? HmiStatuses.Draft : HmiStatuses.Approved, UpdatedBy = "system",
+            };
+            const string S = HmiGroups.Section;
+            HmiElement[] starter =
+            [
+                E("HMI-INLET-01", S, "inlet", L("Вход наружного воздуха", "Fresh air inlet", "כניסת אוויר צח"), 70),
+                E("HMI-FILTER-01", S, "filter", L("Фильтр 12 %", "Filter 12 %", "מסנן 12%"), 50, new { label = "12%" }),
+                E("HMI-FILTER-02", S, "filter", L("Фильтр 30 %", "Filter 30 %", "מסנן 30%"), 50, new { label = "30%" }),
+                E("HMI-FILTER-03", S, "filter", L("Фильтр 95 %", "Filter 95 %", "מסנן 95%"), 60, new { label = "95%" }),
+                E("HMI-COIL-01", S, "coil", L("Охладитель DX (VRF)", "DX cooling coil (VRF)", "סוללת קירור DX (VRF)"), 70, new { label = "DX" }),
+                E("HMI-HEATER-01", S, "heater", L("Электронагреватель, 3 ступени", "Electric heater, 3 stages", "מחמם חשמלי, 3 דרגות"), 90, new { stages = 3 }),
+                E("HMI-FAN-01", S, "fan", L("Вентилятор EC", "EC fan", "מפוח EC"), 130),
+                E("HMI-OUTLET-01", S, "outlet", L("Выход в воздуховод", "Supply outlet", "יציאה לתעלה"), 70),
+                E("HMI-HUMIDIFIER-01", S, "humidifier", L("Увлажнитель", "Humidifier", "מלחלח"), 80, draft: true),
+                E("HMI-DAMPER-01", S, "damper", L("Заслонка с электроприводом", "Motorised damper", "מדף ממונע"), 60,
+                    new { drive = "motor", supply = "24V AC/DC", control = "0-10V", feedback = "0-10V" }),
+                E("HMI-DAMPER-02", S, "damper", L("Заслонка ручная", "Manual damper", "מדף ידני"), 50, new { drive = "manual" }),
+                E("HMI-VRF-01", HmiGroups.Equipment, "vrf", L("Наружный блок VRF", "VRF outdoor unit", "יחידה חיצונית VRF"), 100),
+                E("HMI-FFU-01", HmiGroups.Equipment, "ffu", L("Потолочный фильтр FFU", "Fan filter unit", "FFU"), 90),
+                E("HMI-AC-01", HmiGroups.Equipment, "acUnit", L("Кондиционер", "Air conditioner", "מזגן"), 110),
+                E("HMI-ROOM-01", HmiGroups.Room, "roomTile", L("Плитка комнаты", "Room tile", "אריח חדר"), 220),
+            ];
+            var have = (await db.HmiElements.Select(e => e.Code).ToListAsync()).ToHashSet();
+            var missing = starter.Where(e => !have.Contains(e.Code)).ToList();
+            if (missing.Count > 0)
+            {
+                db.HmiElements.AddRange(missing);
+                await db.SaveChangesAsync();
+            }
+        }
+
+        var demo = await db.Projects.Where(p => p.Number == "DEMO-001" && !p.IsArchived).OrderBy(p => p.CreatedAt).FirstOrDefaultAsync();
+        if (demo is null || await db.HmiScreens.AnyAsync(s => s.ProjectId == demo.Id)) return;
+
+        var lib = await db.HmiElements.AsNoTracking().ToDictionaryAsync(e => e.Code);
+        object Item(string code, object bind)
+        {
+            var e = lib[code];
+            return new
+            {
+                uid = Guid.NewGuid().ToString("N")[..8], elementId = e.Id, version = e.Version, code = e.Code, kind = e.Kind, art = e.Art,
+                length = e.Length, @params = JsonDocument.Parse(e.ParamsJson).RootElement, name = e.Name.ToDto(), bind,
+            };
+        }
+        var ahu = new
+        {
+            flowTag = "AHU1.FLOW.PCT",
+            items = new[]
+            {
+                Item("HMI-INLET-01", new { t = "OUT.T" }),
+                Item("HMI-FILTER-01", new { dp = "AHU1.FLT1.DP", dirt = "AHU1.FLT.DIRT" }),
+                Item("HMI-FILTER-02", new { dp = "AHU1.FLT1.DP", dirt = "AHU1.FLT.DIRT" }),
+                Item("HMI-COIL-01", new { on = "AHU1.VRF.ON", cap = "AHU1.VRF.CAP", mode = "AHU1.VRF.MODE", fault = "AHU1.VRF.FAULT" }),
+                Item("HMI-HEATER-01", new { stages = "AHU1.HTR.STAGES", trip = "AHU1.TS.TRIP" }),
+                Item("HMI-FAN-01", new { run = "AHU1.FAN.RUN", speed = "AHU1.FAN.SPD", fault = "AHU1.VSD.FAULT", flow = "AHU1.FS.FLOW" }),
+                Item("HMI-FILTER-03", new { dp = "AHU1.FLT2.DP", dirt = "AHU1.FLT.DIRT" }),
+                Item("HMI-OUTLET-01", new { t = "AHU1.SUP.T", p = "AHU1.SUP.P", cfm = "AHU1.SUP.CFM" }),
+            },
+        };
+        var room = await db.Rooms.AsNoTracking().Where(r => r.ProjectId == demo.Id).OrderBy(r => r.SortOrder).FirstOrDefaultAsync();
+        var rooms = new { rooms = room is null ? [] : new[] { new { roomId = room.Id, bind = new { t = "ROOM1.T", rh = "", dp = "" } } } };
+        db.HmiScreens.AddRange(
+            new HmiScreen
+            {
+                ProjectId = demo.Id, Kind = HmiScreenKinds.Ahu, SortOrder = 1,
+                Name = L("Приточная установка AC-1", "Supply unit AC-1", "יחידת אספקה AC-1"),
+                ContentJson = JsonSerializer.Serialize(ahu, Localized.Json),
+            },
+            new HmiScreen
+            {
+                ProjectId = demo.Id, Kind = HmiScreenKinds.Rooms, SortOrder = 2,
+                Name = L("Комнаты", "Rooms", "חדרים"),
+                ContentJson = JsonSerializer.Serialize(rooms, Localized.Json),
+            });
+        await db.SaveChangesAsync();
     }
 
     /// <summary>Analog channels are set per channel to one signal type; it goes to the module firmware.</summary>

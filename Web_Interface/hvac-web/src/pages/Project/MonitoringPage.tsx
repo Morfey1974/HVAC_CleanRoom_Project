@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { api, type Equipment, type ProjectModule, type Room } from '../../api/client';
+import { api, type Equipment, type HmiScreen, type ProjectModule, type Room } from '../../api/client';
 import { MnemoView } from '../../mnemo/MnemoView';
+import { AhuView } from '../../hmi/AhuView';
+import { RoomTiles } from '../../hmi/RoomTiles';
+import { BidiText } from '../../components/BidiText';
 import { demoNanoMotion } from '../../mnemo/demoNanoMotion';
 import { useLive, type LiveSnapshot } from '../../context/LiveDataContext';
 import { useAuth } from '../../context/AuthContext';
@@ -26,14 +29,28 @@ export function SiteOnly({ children }: { children: ReactNode }) {
 
 const DEMO_PROJECT = 'DEMO-001';
 
+function useHmiScreens() {
+  const { token } = useAuth();
+  const { projectId } = useProject();
+  const [data, setData] = useState<{ list: HmiScreen[]; rooms: Room[] } | null>(null);
+  useEffect(() => {
+    if (!token) return;
+    Promise.all([api.hmiScreens(token, projectId), api.rooms(token, projectId)])
+      .then(([list, rooms]) => setData({ list, rooms }))
+      .catch(() => setData({ list: [], rooms: [] }));
+  }, [token, projectId]);
+  return data;
+}
+
 export function MonitoringPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { snapshot } = useLive();
   const { hasRole } = useAuth();
   const { project } = useProject();
   const alarmElements = useMemo(() => new Set((snapshot?.alarms ?? []).map((a) => a.element)), [snapshot]);
   const showSim = snapshot?.mode === 'simulator' && hasRole('Engineer');
-  const demo = project?.number === DEMO_PROJECT;
+  const screens = useHmiScreens();
+  const demo = project?.number === DEMO_PROJECT && screens !== null && screens.list.length === 0;
 
   return (
     <div className="page">
@@ -41,6 +58,25 @@ export function MonitoringPage() {
       <SiteOnly>
         {snapshot && <SourceBar snapshot={snapshot} />}
         <RoomCards />
+        {screens && screens.list.length > 0 && (
+          <div className="monitor-layout mt">
+            <div className="hmi-live">
+              {screens.list.map((s) => (
+                <div key={s.id} className="card hmi-host">
+                  <b className="small hmi-live__title">
+                    <BidiText>{pickName(s.name, i18n.language).value}</BidiText>
+                  </b>
+                  {s.kind === 'ahu' ? (
+                    <AhuView items={s.content.items ?? []} values={snapshot?.values} flowTag={s.content.flowTag} />
+                  ) : (
+                    <RoomTiles rooms={screens.rooms} items={s.content.rooms ?? []} values={snapshot?.values} />
+                  )}
+                </div>
+              ))}
+            </div>
+            {showSim && <SimulatorPanel />}
+          </div>
+        )}
         {demo && (
           <div className="monitor-layout mt">
             <div className="card mn-card-host">

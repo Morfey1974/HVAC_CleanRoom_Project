@@ -10,6 +10,7 @@ import { ProjectsPage } from './pages/Projects/ProjectsPage';
 import { ProjectWizard } from './pages/Projects/ProjectWizard';
 import { LibraryPage } from './pages/Library/LibraryPage';
 import { SettingsPage } from './pages/Settings/SettingsPage';
+import { HmiLibraryPage } from './pages/Hmi/HmiLibraryPage';
 import { ProjectRoutes } from './pages/Project/ProjectRoutes';
 import { api } from './api/client';
 import { applyStartupLanguage } from './i18n';
@@ -41,6 +42,7 @@ function AppRoutes() {
           />
           <Route path="/library" element={<Navigate to="/library/module" replace />} />
           <Route path="/library/:category" element={<LibraryPage />} />
+          <Route path="/hmi-library" element={<HmiLibraryPage />} />
           <Route path="/system/*" element={<SettingsPage />} />
           <Route path="/p/:projectId/*" element={<ProjectRoutes />} />
           <Route path="/active/:section" element={<ActiveProjectRedirect />} />

@@ -15,6 +15,7 @@ type NavItem = { to: string; key: string; minRole: Role };
 const globalNav: NavItem[] = [
   { to: '/projects', key: 'projects', minRole: 'Viewer' },
   { to: '/library', key: 'library', minRole: 'Viewer' },
+  { to: '/hmi-library', key: 'hmiLibrary', minRole: 'Viewer' },
   { to: '/system', key: 'system', minRole: 'Viewer' },
 ];
 

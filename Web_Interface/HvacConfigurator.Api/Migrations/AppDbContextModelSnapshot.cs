@@ -168,6 +168,104 @@ namespace HvacConfigurator.Api.Migrations
                     b.ToTable("FirmwareFiles");
                 });
 
+            modelBuilder.Entity("HvacConfigurator.Api.Entities.HmiElement", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Art")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Group")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int>("Length")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ParamsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("Group");
+
+                    b.ToTable("HmiElements");
+                });
+
+            modelBuilder.Entity("HvacConfigurator.Api.Entities.HmiScreen", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProjectId");
+
+                    b.ToTable("HmiScreens");
+                });
+
             modelBuilder.Entity("HvacConfigurator.Api.Entities.LibraryItem", b =>
                 {
                     b.Property<Guid>("Id")
@@ -634,6 +732,86 @@ namespace HvacConfigurator.Api.Migrations
                         .IsUnique();
 
                     b.ToTable("Users");
+                });
+
+            modelBuilder.Entity("HvacConfigurator.Api.Entities.HmiElement", b =>
+                {
+                    b.OwnsOne("HvacConfigurator.Api.Entities.LocalizedText", "Name", b1 =>
+                        {
+                            b1.Property<Guid>("HmiElementId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<string>("En")
+                                .IsRequired()
+                                .HasMaxLength(200)
+                                .HasColumnType("character varying(200)")
+                                .HasColumnName("NameEn");
+
+                            b1.Property<string>("He")
+                                .IsRequired()
+                                .HasMaxLength(200)
+                                .HasColumnType("character varying(200)")
+                                .HasColumnName("NameHe");
+
+                            b1.Property<string>("Ru")
+                                .IsRequired()
+                                .HasMaxLength(200)
+                                .HasColumnType("character varying(200)")
+                                .HasColumnName("NameRu");
+
+                            b1.HasKey("HmiElementId");
+
+                            b1.ToTable("HmiElements");
+
+                            b1.WithOwner()
+                                .HasForeignKey("HmiElementId");
+                        });
+
+                    b.Navigation("Name")
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("HvacConfigurator.Api.Entities.HmiScreen", b =>
+                {
+                    b.HasOne("HvacConfigurator.Api.Entities.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.OwnsOne("HvacConfigurator.Api.Entities.LocalizedText", "Name", b1 =>
+                        {
+                            b1.Property<Guid>("HmiScreenId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<string>("En")
+                                .IsRequired()
+                                .HasMaxLength(200)
+                                .HasColumnType("character varying(200)")
+                                .HasColumnName("NameEn");
+
+                            b1.Property<string>("He")
+                                .IsRequired()
+                                .HasMaxLength(200)
+                                .HasColumnType("character varying(200)")
+                                .HasColumnName("NameHe");
+
+                            b1.Property<string>("Ru")
+                                .IsRequired()
+                                .HasMaxLength(200)
+                                .HasColumnType("character varying(200)")
+                                .HasColumnName("NameRu");
+
+                            b1.HasKey("HmiScreenId");
+
+                            b1.ToTable("HmiScreens");
+
+                            b1.WithOwner()
+                                .HasForeignKey("HmiScreenId");
+                        });
+
+                    b.Navigation("Name")
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("HvacConfigurator.Api.Entities.LibraryItem", b =>

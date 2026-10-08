@@ -18,6 +18,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<AlarmEvent> AlarmEvents => Set<AlarmEvent>();
     public DbSet<SystemSettings> SystemSettings => Set<SystemSettings>();
     public DbSet<FirmwareFile> FirmwareFiles => Set<FirmwareFile>();
+    public DbSet<HmiElement> HmiElements => Set<HmiElement>();
+    public DbSet<HmiScreen> HmiScreens => Set<HmiScreen>();
 
     private static void LocalizedName<T>(OwnedNavigationBuilder<T, LocalizedText> n, int max) where T : class
     {
@@ -143,6 +145,28 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.FileName).HasMaxLength(260);
             e.Property(x => x.Notes).HasMaxLength(1000);
             e.Property(x => x.UploadedBy).HasMaxLength(64);
+        });
+
+        b.Entity<HmiElement>(e =>
+        {
+            e.HasIndex(x => x.Code).IsUnique();
+            e.HasIndex(x => x.Group);
+            e.OwnsOne(x => x.Name, n => LocalizedName(n, 200));
+            e.Property(x => x.Code).HasMaxLength(64);
+            e.Property(x => x.Group).HasMaxLength(24);
+            e.Property(x => x.Kind).HasMaxLength(32);
+            e.Property(x => x.Art).HasMaxLength(32);
+            e.Property(x => x.Description).HasMaxLength(2000);
+            e.Property(x => x.Status).HasMaxLength(16);
+            e.Property(x => x.UpdatedBy).HasMaxLength(64);
+        });
+
+        b.Entity<HmiScreen>(e =>
+        {
+            e.HasIndex(x => x.ProjectId);
+            e.OwnsOne(x => x.Name, n => LocalizedName(n, 200));
+            e.Property(x => x.Kind).HasMaxLength(16);
+            e.HasOne<Project>().WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }
