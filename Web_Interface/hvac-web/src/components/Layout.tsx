@@ -75,6 +75,19 @@ function PlcStatus() {
       <span className="plc-status__dot" />
       {online ? t('header.plcOnline') : t('header.plcOffline')}
       {online && snapshot?.mode === 'simulator' && <span className="plc-status__mode">{t('header.simulator')}</span>}
+      {online && snapshot?.mode === 'plc' && <PlcClock time={snapshot.plcTime} ok={!!snapshot.plcClockOk} />}
+    </span>
+  );
+}
+
+function PlcClock({ time, ok }: { time?: string | null; ok: boolean }) {
+  const { t, i18n } = useTranslation();
+  const at = ok && time ? new Date(time) : null;
+  if (!at || Number.isNaN(at.getTime()))
+    return <span className="plc-clock plc-clock--bad" title={t('header.plcClockBad')}>--:--:--</span>;
+  return (
+    <span className="plc-clock" title={`${t('header.plcClock')}: ${at.toLocaleDateString(i18n.language)}`}>
+      {at.toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
     </span>
   );
 }

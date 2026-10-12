@@ -579,6 +579,9 @@ namespace HvacConfigurator.Api.Migrations
                         .HasMaxLength(8)
                         .HasColumnType("character varying(8)");
 
+                    b.Property<Guid?>("RoomId")
+                        .HasColumnType("uuid");
+
                     b.Property<double>("SchemeX")
                         .HasColumnType("double precision");
 

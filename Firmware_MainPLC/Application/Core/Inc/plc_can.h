@@ -5,9 +5,11 @@
  *   CAN2 (FDCAN2) — ID line 2: HUBs of displays.
  *   CAN3 (FDCAN3) — ID line 3: Phoenix DIN-rail bus (locomotives, HUBs) and the doors master.
  *
- * AI measurement frames (HVAC_CAN_ID_AI_MEAS) received on CAN1 or CAN3 are forwarded
- * unchanged to CAN2 and CAN3 (not back to the bus they came from). If no AI frame arrives
- * for HVAC_AI_LINK_TIMEOUT_MS, the PLC sends NO_LINK frames itself.
+ * AI measurement frames (HVAC_CAN_ID_AI_MEAS) received on CAN1 or CAN3 are kept per sender
+ * (rail and place in the frame). Every HVAC_ROOM_PERIOD_MS the PLC sends HVAC_CAN_ID_ROOM on CAN2
+ * and CAN3: temperature, humidity and pressure from the AI channels the configuration assigns to
+ * these quantities (without a configuration: channel 1 = humidity, channel 2 = temperature of the
+ * last AI frame, as on the bench).
  * Every HVAC_DOORS_PERIOD_MS the PLC sends HVAC_CAN_ID_DOORS on CAN2 and CAN3; the state
  * comes from the doors master on CAN3 (hvac_can.h, DM_*) while it talks, otherwise from Modbus.
  * Module configuration frames (hvac_cfg.h) go on the bus of the module's line, see plc_cfg.
@@ -18,9 +20,21 @@
 #include <stdint.h>
 #include "hvac_can.h"
 
+#define PLC_AI_SOURCES    8u
+
+/* Last frame of one AI module. */
 typedef struct
 {
-  HvacAiMeas meas;       /* last AI frame (or NO_LINK frame sent by the PLC) */
+  HvacAiMeas meas;
+  uint32_t   age_ms;
+} PlcAiSource;
+
+typedef struct
+{
+  HvacAiMeas meas;       /* last AI frame (or NO_LINK) */
+  HvacRoomMeas room;     /* last room frame sent to the displays */
+  uint8_t  src_n;
+  PlcAiSource src[PLC_AI_SOURCES];
   uint8_t  loco_link;    /* 1: AI frame within HVAC_AI_LINK_TIMEOUT_MS */
   uint8_t  init_ok;      /* 1: CAN1 and CAN2 started */
   uint8_t  loco_bus_off; /* bus-off events counter, CAN1 */

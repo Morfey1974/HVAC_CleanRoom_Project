@@ -72,6 +72,11 @@ public class ModuleService(AppDbContext db, AuditService audit)
         var channelInput = req.Channels ?? (row is null ? [] : ChannelsOf(row));
         if (CleanChannels(channelInput, lib, req.Channels is not null, out var channels) is { } chErr) return (null, chErr);
         if (req.Channels is not null && await CheckBindingsAsync(projectId, channels, ct) is { } bErr) return (null, bErr);
+        if (req.RoomId is { } rid && rid != Guid.Empty)
+        {
+            if (kind != ModuleKind.Display) return (null, "room_display_only");
+            if (!await db.Rooms.AnyAsync(r => r.Id == rid && r.ProjectId == projectId, ct)) return (null, "room_not_found");
+        }
 
         var isNew = row is null;
         var before = isNew ? null : Localized.ToJson(Summary(Place(row!)));
@@ -90,6 +95,7 @@ public class ModuleService(AppDbContext db, AuditService audit)
         row.Revision = req.Revision?.Trim().ToUpperInvariant() ?? "";
         row.Notes = req.Notes?.Trim() ?? "";
         row.ChannelsJson = channels.Count == 0 ? "" : JsonSerializer.Serialize(channels, Localized.Json);
+        if (req.RoomId is { } room) row.RoomId = room == Guid.Empty ? null : room;
         row.UpdatedAt = DateTime.UtcNow;
         if (isNew)
         {
@@ -408,11 +414,11 @@ public class ModuleService(AppDbContext db, AuditService audit)
         foreach (var c in input)
         {
             var mode = c.Mode?.Trim() ?? "";
-            // A sensor without an output yet is kept: the output is picked next.
-            var bound = c.EquipmentId is not null;
+            // A sensor without an output yet is kept: the output is picked next. An unused channel has no sensor.
+            var bound = c.EquipmentId is not null && mode != ModuleRules.ChannelOff;
             if (mode.Length == 0 && !bound) continue;
             var inRange = c.Channel >= 1 && c.Channel <= count;
-            var modeOk = mode.Length == 0 || modes.Contains(mode);
+            var modeOk = mode.Length == 0 || mode == ModuleRules.ChannelOff || modes.Contains(mode);
             if ((!inRange || !modeOk) && strict)
             {
                 clean = [];
@@ -456,12 +462,13 @@ public class ModuleService(AppDbContext db, AuditService audit)
         p.Row.Revision,
         userName = p.Row.UserName.ToDto(),
         channels = ChannelsOf(p.Row).Select(c => c.EquipmentId is null ? $"{c.Channel}:{c.Mode}" : $"{c.Channel}:{c.Mode}:{c.EquipmentId}/{c.Output}"),
+        room = p.Row.RoomId,
     };
 
     private static ProjectModuleDto ToDto(Placed p, int? latest) => new(
         p.Row.Id, p.Row.LibraryItemId, p.Row.LibraryVersion, latest, p.Lib, p.Kind.ToString().ToLowerInvariant(),
         p.Row.Line, p.Row.Rail, p.Row.Place, ModuleRules.IdOf(p.Kind, p.Row.Line, p.Row.Rail, p.Row.Place), SystemName(p),
-        p.Row.UserName.ToDto(), p.Row.ExpectedSerial, p.Row.Revision, p.Row.Notes, p.IsPlaced, p.Row.SchemeX, p.Row.SchemeY, ChannelsOf(p.Row));
+        p.Row.UserName.ToDto(), p.Row.ExpectedSerial, p.Row.Revision, p.Row.Notes, p.IsPlaced, p.Row.SchemeX, p.Row.SchemeY, ChannelsOf(p.Row), p.Row.RoomId);
 
     private sealed record Route(string Style, List<SchemePointDto> Points);
 

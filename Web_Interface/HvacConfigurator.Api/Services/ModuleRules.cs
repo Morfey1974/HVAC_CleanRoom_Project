@@ -21,6 +21,9 @@ public static partial class ModuleRules
     /// <summary>Channel signal types known to the module firmware.</summary>
     public static readonly string[] SignalModes = ["0-10V", "2-10V", "0-5V", "0-20mA", "4-20mA", "PT100", "PT1000", "NTC10K"];
 
+    /// <summary>Channel mode "not used": any module accepts it, the channel carries no sensor and raises no fault.</summary>
+    public const string ChannelOff = "off";
+
     [GeneratedRegex(@"^HC-[A-Z]+[0-9]*(-[A-Z0-9]+)?$")]
     public static partial Regex ArticleFormat();
 

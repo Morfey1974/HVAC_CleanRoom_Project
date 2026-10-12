@@ -115,6 +115,7 @@ public class ProjectService(AppDbContext db, AuditService audit)
                 ProjectId = copy.Id, LibraryItemId = m.LibraryItemId, LibraryVersion = m.LibraryVersion, SnapshotJson = m.SnapshotJson,
                 Line = m.Line, Rail = m.Rail, Place = m.Place, Revision = m.Revision, Notes = m.Notes,
                 UserName = new LocalizedText { Ru = m.UserName.Ru, En = m.UserName.En, He = m.UserName.He },
+                RoomId = m.RoomId is { } mr && roomMap.TryGetValue(mr, out var nmr) ? nmr : null,
             });
         foreach (var d in src.Documents)
             copy.Documents.Add(new ProjectDocument

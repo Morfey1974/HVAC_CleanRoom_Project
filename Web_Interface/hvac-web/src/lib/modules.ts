@@ -42,6 +42,9 @@ export function systemNameOf(kind: ModuleKind, prefix: string, rail: number, pla
 /** Channel signal types known to the module firmware (mirrors ModuleRules.SignalModes). */
 export const SIGNAL_MODES = ['0-10V', '2-10V', '0-5V', '0-20mA', '4-20mA', 'PT100', 'PT1000', 'NTC10K'] as const;
 
+/** Channel mode "not used" (ModuleRules.ChannelOff): no sensor, no fault. */
+export const CHANNEL_OFF = 'off';
+
 /** Channels of a module that still need a signal type chosen. */
 export function channelsNotSet(m: ProjectModule): number[] {
   const count = m.snapshot?.channelCount ?? 0;

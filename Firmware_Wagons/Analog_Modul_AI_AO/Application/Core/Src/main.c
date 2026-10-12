@@ -38,7 +38,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define AI_FW_VERSION       0x0103u /* major << 8 | minor */
+#define AI_FW_VERSION       0x0104u /* major << 8 | minor */
 #define AI_BOARD_REV        1u
 #define AI_APP_START        0x08004000u /* after the 16K bootloader, see linker script */
 
@@ -352,8 +352,10 @@ int main(void)
     {
       last_send = HAL_GetTick();
 
-      /* Frame fields: humidity = channel 1, temperature = channel 2 (bench layout). */
+      /* Frame fields: humidity = channel 1, temperature = channel 2; the PLC maps them by the configuration. */
       uint8_t adc_fault = 0u;
+      uint8_t id_line;
+      if (!HvacId_Get(&id_line, &meas.rail, &meas.place)) meas.place = meas.rail = HVAC_AI_PLACE_NONE;
       meas.status = 0u;
       if (!AI_ReadChannel(0u, &meas.humidity_pct, &adc_fault))
         meas.status |= HVAC_AI_ST_HUM_FAULT;

@@ -201,7 +201,10 @@ export type ProjectModule = {
   schemeX: number;
   schemeY: number;
   channels: ModuleChannel[];
+  roomId: string | null;
 };
+
+export const NO_ROOM = '00000000-0000-0000-0000-000000000000';
 
 export type ProjectModuleSave = {
   libraryItemId: string;
@@ -213,6 +216,8 @@ export type ProjectModuleSave = {
   revision: string;
   notes: string;
   channels?: ModuleChannel[];
+  /** Omit to keep the current room; NO_ROOM clears it. */
+  roomId?: string;
   reason?: string;
 };
 

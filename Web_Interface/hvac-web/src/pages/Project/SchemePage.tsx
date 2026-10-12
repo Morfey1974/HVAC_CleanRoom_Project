@@ -24,12 +24,14 @@ import '@xyflow/react/dist/style.css';
 import {
   api,
   linkStyles,
+  NO_ROOM,
   type GraphicPort,
   type LibraryItem,
   type LinkStyle,
   type ModuleChannel,
   type ProjectLink,
   type ProjectModule,
+  type Room,
   type Scheme,
   type SchemePoint,
 } from '../../api/client';
@@ -125,6 +127,7 @@ function SchemeEditor() {
   const wrapper = useRef<HTMLDivElement>(null);
   const [scheme, setScheme] = useState<Scheme | null>(null);
   const [library, setLibrary] = useState<LibraryItem[]>([]);
+  const [rooms, setRooms] = useState<Room[]>([]);
   const [nodes, setNodes] = useState<ModuleNode[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
@@ -162,6 +165,13 @@ function SchemeEditor() {
         .then((l) => setLibrary(l.filter((i) => i.kind && i.kind !== 'plugin')))
         .catch(() => undefined);
   }, [token]);
+  useEffect(() => {
+    if (token)
+      api
+        .rooms(token, projectId)
+        .then(setRooms)
+        .catch(() => undefined);
+  }, [token, projectId]);
 
   const byId = useMemo(() => new Map((scheme?.modules ?? []).map((m) => [m.id, m])), [scheme]);
 
@@ -184,9 +194,11 @@ function SchemeEditor() {
         list.push({ moduleId: m.id, text: t('scheme.warn.outdated', { name: m.systemName, from: m.libraryVersion, to: m.libraryLatestVersion }) });
       const unset = channelsNotSet(m);
       if (unset.length) list.push({ moduleId: m.id, text: t('scheme.warn.channelsNotSet', { name: m.systemName, channels: unset.join(', ') }) });
+      if (m.kind === 'display' && rooms.length && !rooms.some((r) => r.id === m.roomId))
+        list.push({ moduleId: m.id, text: t('scheme.warn.displayNoRoom', { name: m.systemName }) });
     }
     return list;
-  }, [scheme, t]);
+  }, [scheme, rooms, t]);
 
   const spec = useMemo(() => {
     const counts = new Map<string, { article: string; name: string; count: number }>();
@@ -391,7 +403,7 @@ function SchemeEditor() {
       await load();
     });
 
-  const saveChannels = (m: ProjectModule, channels: ModuleChannel[]) =>
+  const saveModule = (m: ProjectModule, change: { channels?: ModuleChannel[]; roomId?: string }) =>
     run(async () => {
       if (!token || !m.libraryItemId) return;
       await api.updateModule(token, projectId, m.id, {
@@ -403,7 +415,8 @@ function SchemeEditor() {
         expectedSerial: m.expectedSerial,
         revision: m.revision,
         notes: m.notes,
-        channels,
+        channels: change.channels ?? m.channels,
+        roomId: change.roomId,
       });
       await load();
     });
@@ -587,9 +600,27 @@ function SchemeEditor() {
                     modes={selected.snapshot!.channelModes!}
                     value={selected.channels}
                     disabled={!canEdit}
-                    onChange={(channels) => saveChannels(selected, channels)}
+                    onChange={(channels) => saveModule(selected, { channels })}
                   />
                 </div>
+              )}
+              {selected.kind === 'display' && (
+                <label className="mt small" title={t('scheme.displayRoomHint')}>
+                  <b>{t('scheme.displayRoom')}</b>
+                  <select
+                    value={selected.roomId ?? ''}
+                    disabled={!canEdit}
+                    onChange={(e) => saveModule(selected, { roomId: e.target.value || NO_ROOM })}
+                  >
+                    <option value="">{t('scheme.displayRoomNone')}</option>
+                    {rooms.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {name(r.name)}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="muted">{t('scheme.displayRoomHint')}</span>
+                </label>
               )}
               <div className="small mt">
                 {(selected.snapshot?.graphic?.ports ?? []).map((p) => {

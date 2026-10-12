@@ -32,6 +32,7 @@
 #include "plc_fwupd.h"
 #include "plc_cfg.h"
 #include "plc_id.h"
+#include "plc_rtc.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -119,6 +120,7 @@ void MX_FREERTOS_Init(void) {
   PlcCfg_Setup();
   PlcFwupd_Start();
   PlcId_Start();
+  PlcRtc_Start();
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */

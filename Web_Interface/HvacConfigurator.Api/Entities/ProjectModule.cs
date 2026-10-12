@@ -25,6 +25,9 @@ public class ProjectModule
     /// <summary>Channel settings (signal type per channel), JSON list of ModuleChannelDto.</summary>
     public string ChannelsJson { get; set; } = "";
 
+    /// <summary>Displays: the room whose sensors the display shows.</summary>
+    public Guid? RoomId { get; set; }
+
     /// <summary>Block position on the system scheme.</summary>
     public double SchemeX { get; set; }
     public double SchemeY { get; set; }

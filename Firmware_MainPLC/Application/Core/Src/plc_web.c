@@ -2,7 +2,8 @@
  * plc_web.c — Main PLC HTTP server: sensor page, JSON API, firmware store API.
  *
  *   GET  /                 sensor page
- *   GET  /api/ai           sensor JSON
+ *   GET  /api/ai           sensor JSON, PLC clock ("rtc", UTC)
+ *   POST /api/rtc/set?t=YYYYMMDDhhmmss  sets the PLC clock (UTC)
  *   GET  /api/fw/status?log=N   store, roll call, update run, log entries with id > N
  *   POST /api/fw/upload?size=N&crc=HEX   body = module .bin (size multiple of 8) -> NEW slot
  *   POST /api/fw/run?type=T&mode=M      update run (PLC_FWUPD_MODE_*)
@@ -31,6 +32,7 @@
 #include "plc_fwstore.h"
 #include "plc_w25q.h"
 #include "plc_cfg.h"
+#include "plc_rtc.h"
 
 #define PLC_WEB_PORT        80u
 #define PLC_WEB_RX_TMO_MS   5000
@@ -210,27 +212,69 @@ static int PlcWeb_FmtCenti(char *buf, size_t len, float v)
 
 static void PlcWeb_SendAi(struct netconn *c)
 {
-  PlcAiSnapshot s;
-  char t[16], h[16];
+  static PlcAiSnapshot s;
+  PlcRtcSnapshot rtc;
+  char t[16], h[16], p[16];
 
   PlcCan_GetSnapshot(&s);
+  PlcRtc_Get(&rtc);
   PlcWeb_FmtCenti(t, sizeof(t), s.meas.temperature_c);
   PlcWeb_FmtCenti(h, sizeof(h), s.meas.humidity_pct);
 
   s_json_len = 0u;
   Json_Add("{\"t\":%s,\"h\":%s,\"st\":%u,\"cnt\":%u,\"link\":%u,\"init\":%u,"
            "\"age\":%lu,\"rx_loco\":%lu,\"tx_hub\":%lu,\"tx_err\":%lu,"
-           "\"rx_hub\":%lu,\"drop\":%lu,\"boff1\":%u,\"boff2\":%u,\"dsrc\":%u}",
+           "\"rx_hub\":%lu,\"drop\":%lu,\"boff1\":%u,\"boff2\":%u,\"dsrc\":%u,",
            t, h, s.meas.status, s.meas.counter, s.loco_link, s.init_ok,
            (unsigned long)s.age_ms, (unsigned long)s.rx_loco, (unsigned long)s.tx_hub,
            (unsigned long)s.tx_hub_err, (unsigned long)s.rx_hub, (unsigned long)s.rx_drop,
            s.loco_bus_off, s.hub_bus_off, s.doors_src);
+  Json_Add("\"src\":[");
+  for (uint8_t i = 0u; i < s.src_n; i++)
+  {
+    const PlcAiSource *a = &s.src[i];
+    PlcWeb_FmtCenti(t, sizeof(t), a->meas.humidity_pct);
+    PlcWeb_FmtCenti(h, sizeof(h), a->meas.temperature_c);
+    Json_Add("%s{\"r\":%u,\"p\":%u,\"v1\":%s,\"v2\":%s,\"st\":%u,\"age\":%lu}", (i > 0u) ? "," : "",
+             a->meas.rail, a->meas.place, t, h, a->meas.status, (unsigned long)a->age_ms);
+  }
+  PlcWeb_FmtCenti(t, sizeof(t), s.room.temperature_c);
+  PlcWeb_FmtCenti(h, sizeof(h), s.room.humidity_pct);
+  PlcWeb_FmtCenti(p, sizeof(p), s.room.pressure_pa);
+  Json_Add("],\"room\":{\"t\":%s,\"h\":%s,\"p\":%s,\"st\":%u},", t, h, p, s.room.status);
+  Json_Add("\"rtc\":{\"ok\":%u,\"valid\":%u,\"t\":\"%04u-%02u-%02uT%02u:%02u:%02uZ\",\"err\":%lu,\"sets\":%lu,"
+           "\"i2cErr\":%lu,\"scan\":%u,\"scanFirst\":%u}}",
+           rtc.present, rtc.valid, rtc.t.year, rtc.t.month, rtc.t.day, rtc.t.hour, rtc.t.min, rtc.t.sec,
+           (unsigned long)rtc.errors, (unsigned long)rtc.sets, (unsigned long)rtc.last_err, rtc.scan_n,
+           rtc.scan_first);
   Json_Send(c);
 }
 
-/* ---------- CAN3 / doors master ---------- */
-
 static void PlcWeb_FwResult(struct netconn *c, uint8_t err);
+
+/* t=YYYYMMDDhhmmss (UTC). */
+static void PlcWeb_RtcSet(struct netconn *c, const WebReq *r)
+{
+  const char *p = strstr(r->query, "t=");
+  char d[15];
+  PlcRtcTime t;
+
+  if (p == NULL || (p != r->query && p[-1] != '&') || strlen(p + 2) < 14u) { PlcWeb_FwResult(c, 1u); return; }
+  memcpy(d, p + 2, 14u);
+  d[14] = '\0';
+  for (uint8_t i = 0u; i < 14u; i++) if (d[i] < '0' || d[i] > '9') { PlcWeb_FwResult(c, 1u); return; }
+#define D2(i) ((uint8_t)((d[i] - '0') * 10 + (d[(i) + 1] - '0')))
+  t.year = (uint16_t)(D2(0) * 100u + D2(2));
+  t.month = D2(4);
+  t.day = D2(6);
+  t.hour = D2(8);
+  t.min = D2(10);
+  t.sec = D2(12);
+#undef D2
+  PlcWeb_FwResult(c, PlcRtc_RequestSet(&t) ? 0u : 1u);
+}
+
+/* ---------- CAN3 / doors master ---------- */
 
 static long Age_Json(uint32_t ms)
 {
@@ -599,6 +643,10 @@ static void PlcWeb_Serve(struct netconn *c)
   else if (strcmp(r.method, "GET") == 0 && strcmp(r.path, "/api/ai") == 0)
   {
     PlcWeb_SendAi(c);
+  }
+  else if (strcmp(r.method, "POST") == 0 && strcmp(r.path, "/api/rtc/set") == 0)
+  {
+    PlcWeb_RtcSet(c, &r);
   }
   else if (strcmp(r.method, "GET") == 0 && strcmp(r.path, "/api/can3") == 0)
   {

@@ -10,6 +10,8 @@ export type LiveSnapshot = {
   connected: boolean;
   values: Record<string, number>;
   alarms: ActiveAlarm[];
+  plcTime?: string | null;
+  plcClockOk?: boolean | null;
 };
 
 type LiveState = {

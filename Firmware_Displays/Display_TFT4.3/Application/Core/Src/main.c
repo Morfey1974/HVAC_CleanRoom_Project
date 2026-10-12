@@ -65,7 +65,7 @@
 #define DEMO_PRESSURE_PA     20.0f
 
 #define DISP_BOARD_REV       1u
-#define DISP_FW_VERSION      0x0103u /* major << 8 | minor */
+#define DISP_FW_VERSION      0x0105u /* major << 8 | minor */
 #define DISP_ID_ENABLED      0u /* board rev 1 has no ID input from the HUB; 1 on boards with it */
 #define DISP_APP_VTOR        0x08020400u /* vector table, see linker script */
 #define DISP_CHAIN_TIMEOUT_MS 3000u
@@ -106,9 +106,12 @@ uint32_t loco_tx_count = 0;
 uint32_t loco_ecr = 0;
 
 /* Written by the FDCAN interrupt, drawn by the main loop (FMC drawing is not reentrant). */
-static volatile HvacAiMeas s_ai_meas;
-static volatile uint32_t s_ai_rx_tick;
-static volatile uint8_t s_ai_received;
+static volatile HvacRoomMeas s_room;
+static volatile uint32_t s_room_rx_tick;
+static volatile uint8_t s_room_received;
+/* Room this display shows (HVAC_CAN_ID_DISP_ROOM for s_my_tag); 0 until the PLC says otherwise. */
+static uint32_t s_my_tag;
+static volatile uint8_t s_my_room;
 static volatile uint8_t s_doors_mask;
 static volatile uint8_t s_doors_status;
 static volatile uint32_t s_doors_rx_tick;
@@ -261,34 +264,28 @@ static void Disp_DrawChain(void)
 }
 
 #if NODE_INDEX == 0
-/* Applies the latest AI frame (or its absence) to the values shown on screen. */
-static void Display_ApplyAiMeas(RoomUi_Values *v)
+/* Applies the latest room frame from the Main PLC (or its absence) to the values shown on screen. */
+static void Display_ApplyRoom(RoomUi_Values *v)
 {
-  HvacAiMeas m;
+  HvacRoomMeas m;
   uint32_t rx_tick;
   uint8_t received;
 
   __disable_irq();
-  m.humidity_pct = s_ai_meas.humidity_pct;
-  m.temperature_c = s_ai_meas.temperature_c;
-  m.status = s_ai_meas.status;
-  rx_tick = s_ai_rx_tick;
-  received = s_ai_received;
+  m.temperature_c = s_room.temperature_c;
+  m.humidity_pct = s_room.humidity_pct;
+  m.pressure_pa = s_room.pressure_pa;
+  m.status = s_room.status;
+  rx_tick = s_room_rx_tick;
+  received = s_room_received;
   __enable_irq();
 
-  uint8_t fault = (uint8_t)(v->fault_mask & ROOM_UI_FAULT_P);
-  if (!received || (HAL_GetTick() - rx_tick) > HVAC_DISPLAY_TIMEOUT_MS ||
-      (m.status & (HVAC_AI_ST_NO_LINK | HVAC_AI_ST_ADC_FAULT)))
+  uint8_t fault = ROOM_UI_FAULT_T | ROOM_UI_FAULT_H | ROOM_UI_FAULT_P;
+  if (received && (HAL_GetTick() - rx_tick) <= HVAC_DISPLAY_TIMEOUT_MS && (m.status & HVAC_ROOM_ST_NO_LINK) == 0u)
   {
-    fault |= ROOM_UI_FAULT_T | ROOM_UI_FAULT_H;
-  }
-  else
-  {
-    if (m.status & HVAC_AI_ST_HUM_FAULT) fault |= ROOM_UI_FAULT_H;
-    else v->humidity_pct = m.humidity_pct;
-    if (m.status & HVAC_AI_ST_TEMP_FAULT) fault |= ROOM_UI_FAULT_T;
-    else v->temperature_c = m.temperature_c;
-    v->pressure_pa = 0.0f; /* no pressure sensor yet */
+    if ((m.status & HVAC_ROOM_ST_T_FAULT) == 0u) { v->temperature_c = m.temperature_c; fault &= (uint8_t)~ROOM_UI_FAULT_T; }
+    if ((m.status & HVAC_ROOM_ST_H_FAULT) == 0u) { v->humidity_pct = m.humidity_pct;   fault &= (uint8_t)~ROOM_UI_FAULT_H; }
+    if ((m.status & HVAC_ROOM_ST_P_FAULT) == 0u) { v->pressure_pa = m.pressure_pa;     fault &= (uint8_t)~ROOM_UI_FAULT_P; }
   }
   v->fault_mask = fault;
 }
@@ -391,7 +388,7 @@ int main(void)
   g_room_values.humidity_pct   = DEMO_HUMIDITY_PCT;
   g_room_values.pressure_pa    = DEMO_PRESSURE_PA;
 #if NODE_INDEX == 0
-  g_room_values.fault_mask     = ROOM_UI_FAULT_T | ROOM_UI_FAULT_H;
+  g_room_values.fault_mask     = ROOM_UI_FAULT_T | ROOM_UI_FAULT_H | ROOM_UI_FAULT_P;
 #endif
   RoomUi_Init("Clean Room");
   RoomUi_Update(&g_room_values);
@@ -419,7 +416,8 @@ int main(void)
   FwupdApp_Init(Disp_SendFwupd, FWUPD_TYPE_DISPLAY_TFT43, DISP_BOARD_REV, DISP_FW_VERSION);
   {
     const uint32_t uid[3] = { HAL_GetUIDw0(), HAL_GetUIDw1(), HAL_GetUIDw2() };
-    if (DISP_ID_ENABLED) HvacId_Init(&s_id_cfg, fwupd_node_tag(uid));
+    s_my_tag = fwupd_node_tag(uid);
+    if (DISP_ID_ENABLED) HvacId_Init(&s_id_cfg, s_my_tag);
   }
   /* USER CODE END 2 */
 
@@ -444,7 +442,7 @@ int main(void)
         HAL_FDCAN_Start(&hfdcan1);
     }
 #if NODE_INDEX == 0
-    Display_ApplyAiMeas(&g_room_values);
+    Display_ApplyRoom(&g_room_values);
     Display_ApplyDoors();
 #endif
     RoomUi_Update(&g_room_values);
@@ -570,16 +568,23 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
         HAL_FDCAN_AddMessageToTxFifoQ(hfdcan, &TxHeader, tx_data);
       }
 #if NODE_INDEX == 0
-      else if (RxHeader.Identifier == HVAC_CAN_ID_AI_MEAS)
+      else if (RxHeader.Identifier == HVAC_CAN_ID_DISP_ROOM && len8)
       {
-        HvacAiMeas m;
-        hvac_can_ai_decode(RxData, &m);
-        s_ai_meas.humidity_pct = m.humidity_pct;
-        s_ai_meas.temperature_c = m.temperature_c;
-        s_ai_meas.status = m.status;
-        s_ai_meas.counter = m.counter;
-        s_ai_rx_tick = HAL_GetTick();
-        s_ai_received = 1U;
+        uint32_t tag = (uint32_t)RxData[0] | ((uint32_t)RxData[1] << 8) |
+                       ((uint32_t)RxData[2] << 16) | ((uint32_t)RxData[3] << 24);
+        if (tag == s_my_tag && tag != 0u) s_my_room = RxData[4];
+      }
+      else if (RxHeader.Identifier == HVAC_CAN_ID_ROOM && len8 && RxData[7] == s_my_room)
+      {
+        HvacRoomMeas m;
+        hvac_can_room_decode(RxData, &m);
+        s_room.temperature_c = m.temperature_c;
+        s_room.humidity_pct = m.humidity_pct;
+        s_room.pressure_pa = m.pressure_pa;
+        s_room.status = m.status;
+        s_room.room = m.room;
+        s_room_rx_tick = HAL_GetTick();
+        s_room_received = 1U;
       }
       else if (RxHeader.Identifier == HVAC_CAN_ID_DOORS && RxHeader.DataLength == FDCAN_DLC_BYTES_4)
       {

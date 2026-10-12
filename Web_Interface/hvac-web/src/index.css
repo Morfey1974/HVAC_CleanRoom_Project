@@ -184,6 +184,16 @@ input[type='number']::-webkit-inner-spin-button {
   color: var(--warning);
 }
 
+.plc-clock {
+  font-variant-numeric: tabular-nums;
+  padding-inline-start: 0.4rem;
+  border-inline-start: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.plc-clock--bad {
+  color: var(--palette-red);
+}
+
 .app-body {
   display: flex;
   flex: 1;

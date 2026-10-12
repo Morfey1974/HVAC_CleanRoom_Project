@@ -60,10 +60,13 @@
 /* ---------- configuration file (HTTP POST /api/cfg on the Main PLC) ----------
  *
  * Little-endian: header, then module_count modules, then channel_count channels.
+ * Format 2 adds channel_count bytes after the channels: room of the sensor on channel i (0 = none).
+ * Rooms are numbered 1..N inside one file; a display shows the room in HvacCfgModule.room.
  * Module types are the catalogue codes of the HVAC application (library "type code").
  */
 #define HVAC_CFGF_MAGIC           0x47464348u /* "HCFG" */
-#define HVAC_CFGF_FORMAT          1u
+#define HVAC_CFGF_FORMAT          2u
+#define HVAC_CFGF_FORMAT_MIN      1u /* format 1: no rooms */
 #define HVAC_CFGF_MAX_SIZE        8192u
 #define HVAC_CFGF_MAX_MODULES     64u
 #define HVAC_CFGF_MAX_CHANNELS    256u
@@ -99,7 +102,8 @@ typedef struct __attribute__((packed))
   uint8_t rail;
   uint8_t place;
   uint8_t channels;        /* channel count of the module */
-  uint8_t reserved[3];
+  uint8_t room;            /* display: room it shows, 0 = not chosen; other modules 0 */
+  uint8_t reserved[2];
 } HvacCfgModule;           /* 8 bytes */
 
 typedef struct __attribute__((packed))

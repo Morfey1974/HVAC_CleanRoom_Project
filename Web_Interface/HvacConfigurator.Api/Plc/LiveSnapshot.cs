@@ -8,7 +8,9 @@ public record LiveSnapshot(
     string Mode,
     bool Connected,
     IReadOnlyDictionary<string, double> Values,
-    IReadOnlyList<ActiveAlarm> Alarms);
+    IReadOnlyList<ActiveAlarm> Alarms,
+    DateTime? PlcTime = null,
+    bool? PlcClockOk = null);
 
 /// <summary>Source of live data: PLC simulator now, real PLC over Ethernet later.</summary>
 public interface IPlcLink

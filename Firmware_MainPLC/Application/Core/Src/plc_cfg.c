@@ -110,16 +110,24 @@ static void Cfg_Channel(const uint8_t *b, uint16_t modules, uint16_t i, HvacCfgC
                (uint32_t)i * sizeof(HvacCfgChannel)], sizeof(*c));
 }
 
+/* Room of the sensor on channel i; 0 in format 1. */
+static uint8_t Cfg_ChannelRoom(const uint8_t *b, const HvacCfgHeader *h, uint16_t i)
+{
+  if (h->format < 2u) return 0u;
+  return b[sizeof(HvacCfgHeader) + (uint32_t)h->module_count * sizeof(HvacCfgModule) +
+           (uint32_t)h->channel_count * sizeof(HvacCfgChannel) + i];
+}
+
 static uint8_t Cfg_Validate(const uint8_t *b, uint32_t n)
 {
   HvacCfgHeader h;
 
   if (n < sizeof(h) || n > HVAC_CFGF_MAX_SIZE) return PLC_CFG_E_SIZE;
   Cfg_Header(b, &h);
-  if (h.magic != HVAC_CFGF_MAGIC || h.format != HVAC_CFGF_FORMAT) return PLC_CFG_E_FORMAT;
+  if (h.magic != HVAC_CFGF_MAGIC || h.format < HVAC_CFGF_FORMAT_MIN || h.format > HVAC_CFGF_FORMAT) return PLC_CFG_E_FORMAT;
   if (h.module_count > HVAC_CFGF_MAX_MODULES || h.channel_count > HVAC_CFGF_MAX_CHANNELS) return PLC_CFG_E_FORMAT;
   if (n != sizeof(h) + (uint32_t)h.module_count * sizeof(HvacCfgModule) +
-           (uint32_t)h.channel_count * sizeof(HvacCfgChannel)) return PLC_CFG_E_SIZE;
+           (uint32_t)h.channel_count * (sizeof(HvacCfgChannel) + ((h.format >= 2u) ? 1u : 0u))) return PLC_CFG_E_SIZE;
 
   for (uint16_t i = 0u; i < h.module_count; i++)
   {
@@ -765,6 +773,62 @@ uint8_t PlcCfg_GetExtra(uint8_t i, PlcIdFound *out)
   }
   osMutexRelease(s_mx);
   return ok;
+}
+
+uint8_t PlcCfg_FindQuantity(uint8_t qty, uint8_t room, uint8_t *rail, uint8_t *place, uint8_t *channel)
+{
+  uint8_t ok = 0u;
+
+  if (osMutexAcquire(s_mx, 50u) != osOK) return 0u;
+  if (s_act_len > 0u)
+  {
+    HvacCfgHeader h;
+    Cfg_Header(s_act, &h);
+    for (uint16_t i = 0u; i < h.channel_count && !ok; i++)
+    {
+      HvacCfgChannel c;
+      HvacCfgModule m;
+      Cfg_Channel(s_act, h.module_count, i, &c);
+      if (c.quantity != qty || c.signal == HVAC_SIG_OFF) continue;
+      if (room != 0u && Cfg_ChannelRoom(s_act, &h, i) != room) continue;
+      Cfg_Module(s_act, c.module, &m);
+      if (m.type != HVAC_CAT_AI) continue;
+      *rail = m.rail;
+      *place = m.place;
+      *channel = c.channel;
+      ok = 1u;
+    }
+  }
+  osMutexRelease(s_mx);
+  return ok;
+}
+
+uint8_t PlcCfg_Present(void)
+{
+  return (s_act_len > 0u) ? 1u : 0u;
+}
+
+uint8_t PlcCfg_GetDisplays(PlcCfgDisplay *out, uint8_t max)
+{
+  uint8_t n = 0u;
+
+  if (osMutexAcquire(s_mx, 50u) != osOK) return 0u;
+  if (s_act_len > 0u)
+  {
+    HvacCfgHeader h;
+    Cfg_Header(s_act, &h);
+    for (uint16_t i = 0u; i < h.module_count && n < max; i++)
+    {
+      HvacCfgModule m;
+      Cfg_Module(s_act, i, &m);
+      if (m.type != HVAC_CAT_TFT43) continue;
+      out[n].tag = s_mod[i].tag;
+      out[n].room = (h.format >= 2u) ? m.room : 0u;
+      n++;
+    }
+  }
+  osMutexRelease(s_mx);
+  return n;
 }
 
 uint8_t PlcCfg_GetModule(uint16_t i, HvacCfgModule *m, PlcCfgModState *st)

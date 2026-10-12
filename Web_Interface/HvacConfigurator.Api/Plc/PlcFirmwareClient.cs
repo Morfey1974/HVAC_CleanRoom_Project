@@ -105,6 +105,10 @@ public class PlcFirmwareClient(IServiceScopeFactory scopes)
     public Task<string> DoorsCmdAsync(int cmd, int mask, CancellationToken ct) =>
         CommandAsync($"/api/doors/cmd?cmd={cmd}&mask={mask:x}", ct);
 
+    /// <summary>Sets the PLC real-time clock (kept in UTC); {ok | err}.</summary>
+    public Task<string> RtcSetAsync(DateTime utc, CancellationToken ct) =>
+        CommandAsync($"/api/rtc/set?t={utc:yyyyMMddHHmmss}", ct);
+
     private async Task<string> CommandAsync(string path, CancellationToken ct)
     {
         if (!await _gate.WaitAsync(ShortTimeout, ct)) throw new PlcUnavailableException("plc_busy");

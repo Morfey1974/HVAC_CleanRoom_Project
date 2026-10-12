@@ -34,6 +34,27 @@ typedef struct
   uint8_t  d[8];
 } Can3Rx;
 
+/* Last frame of every AI sender (rail, place); used only by the CAN task, copied under the critical section. */
+typedef struct
+{
+  HvacAiMeas meas;
+  uint32_t   t;
+} AiSource;
+
+static AiSource s_src[PLC_AI_SOURCES];
+static uint8_t s_src_n;
+
+#define PLC_DISPLAYS_MAX          16u
+#define PLC_ROOM_FRAMES_PER_LOOP  3u
+
+static uint8_t s_rooms[PLC_DISPLAYS_MAX + 1u];
+static uint8_t s_rooms_n;
+static uint8_t s_rooms_i;
+static PlcCfgDisplay s_disp[PLC_DISPLAYS_MAX];
+static uint8_t s_disp_n;
+static uint8_t s_disp_i;
+static uint32_t s_disp_t;
+
 static osMessageQueueId_t s_loco_q;
 static volatile uint32_t s_rx_hub;
 static volatile uint32_t s_rx_drop;
@@ -154,6 +175,155 @@ static void PlcCan_SendDoors(uint8_t counter)
   d[2] = counter;
   s_snap.doors_src = src;
   PlcCan_SendDisplays(HVAC_CAN_ID_DOORS, FDCAN_DLC_BYTES_4, d, 0u);
+}
+
+static void PlcCan_KeepSource(const HvacAiMeas *m, uint32_t now)
+{
+  uint8_t i;
+
+  for (i = 0u; i < s_src_n; i++)
+  {
+    if (s_src[i].meas.rail == m->rail && s_src[i].meas.place == m->place) break;
+  }
+  if (i == s_src_n)
+  {
+    if (s_src_n < PLC_AI_SOURCES) s_src_n++;
+    else
+    {
+      /* Table full: replace the sender heard least recently. */
+      i = 0u;
+      for (uint8_t k = 1u; k < PLC_AI_SOURCES; k++) if ((now - s_src[k].t) > (now - s_src[i].t)) i = k;
+    }
+  }
+  taskENTER_CRITICAL();
+  s_src[i].meas = *m;
+  s_src[i].t = now;
+  taskEXIT_CRITICAL();
+}
+
+/* Value of one channel of a sender heard within HVAC_AI_LINK_TIMEOUT_MS; 0 if silent or faulty. */
+static uint8_t PlcCan_SourceValue(uint8_t rail, uint8_t place, uint8_t ch, uint32_t now, float *v)
+{
+  for (uint8_t i = 0u; i < s_src_n; i++)
+  {
+    const HvacAiMeas *m = &s_src[i].meas;
+
+    if (m->rail != rail || m->place != place) continue;
+    if ((now - s_src[i].t) >= HVAC_AI_LINK_TIMEOUT_MS) return 0u;
+    if (m->status & (HVAC_AI_ST_NO_LINK | HVAC_AI_ST_ADC_FAULT)) return 0u;
+    if (ch == 1u && (m->status & HVAC_AI_ST_HUM_FAULT) == 0u)  { *v = m->humidity_pct;  return 1u; }
+    if (ch == 2u && (m->status & HVAC_AI_ST_TEMP_FAULT) == 0u) { *v = m->temperature_c; return 1u; }
+    return 0u;
+  }
+  return 0u;
+}
+
+static uint8_t PlcCan_QuantityValue(uint8_t qty, uint8_t room, uint32_t now, float *v)
+{
+  uint8_t rail, place, ch;
+
+  if (!PlcCfg_FindQuantity(qty, room, &rail, &place, &ch)) return 0u;
+  return PlcCan_SourceValue(rail, place, ch, now, v);
+}
+
+static void PlcCan_SendRoom(uint8_t room, uint32_t now, uint8_t ai_link)
+{
+  HvacRoomMeas r = {0};
+  uint8_t d[8];
+
+  r.room = room;
+  r.status = HVAC_ROOM_ST_T_FAULT | HVAC_ROOM_ST_H_FAULT | HVAC_ROOM_ST_P_FAULT;
+  if (!ai_link)
+  {
+    r.status |= HVAC_ROOM_ST_NO_LINK;
+  }
+  else if (PlcCfg_Present())
+  {
+    if (PlcCan_QuantityValue(HVAC_QTY_TEMPERATURE, room, now, &r.temperature_c)) r.status &= (uint8_t)~HVAC_ROOM_ST_T_FAULT;
+    if (PlcCan_QuantityValue(HVAC_QTY_HUMIDITY, room, now, &r.humidity_pct))     r.status &= (uint8_t)~HVAC_ROOM_ST_H_FAULT;
+    if (PlcCan_QuantityValue(HVAC_QTY_PRESSURE, room, now, &r.pressure_pa))      r.status &= (uint8_t)~HVAC_ROOM_ST_P_FAULT;
+  }
+  else
+  {
+    const HvacAiMeas *m = &s_snap.meas;
+    if ((m->status & (HVAC_AI_ST_NO_LINK | HVAC_AI_ST_ADC_FAULT)) == 0u)
+    {
+      if ((m->status & HVAC_AI_ST_HUM_FAULT) == 0u)
+      {
+        r.humidity_pct = m->humidity_pct;
+        r.status &= (uint8_t)~HVAC_ROOM_ST_H_FAULT;
+      }
+      if ((m->status & HVAC_AI_ST_TEMP_FAULT) == 0u)
+      {
+        r.temperature_c = m->temperature_c;
+        r.status &= (uint8_t)~HVAC_ROOM_ST_T_FAULT;
+      }
+    }
+  }
+  hvac_can_room_encode(&r, d);
+  PlcCan_SendDisplays(HVAC_CAN_ID_ROOM, FDCAN_DLC_BYTES_8, d, 0u);
+  if (room == 0u)
+  {
+    taskENTER_CRITICAL();
+    s_snap.room = r;
+    taskEXIT_CRITICAL();
+  }
+}
+
+/* Room 0 and every room a display shows, every HVAC_ROOM_PERIOD_MS; which room each display shows,
+ * every HVAC_DISP_ROOM_PERIOD_MS. Frames are spread over the task loop so the TX FIFO never overflows. */
+static void PlcCan_RoomsPlan(uint32_t now)
+{
+  PlcCfgDisplay disp[PLC_DISPLAYS_MAX];
+  uint8_t n = PlcCfg_GetDisplays(disp, PLC_DISPLAYS_MAX);
+
+  s_rooms[0] = 0u;
+  s_rooms_n = 1u;
+  for (uint8_t i = 0u; i < n; i++)
+  {
+    uint8_t k = 0u;
+    while (k < s_rooms_n && s_rooms[k] != disp[i].room) k++;
+    if (k == s_rooms_n && s_rooms_n < PLC_DISPLAYS_MAX + 1u) s_rooms[s_rooms_n++] = disp[i].room;
+  }
+  s_rooms_i = 0u;
+
+  if ((now - s_disp_t) >= HVAC_DISP_ROOM_PERIOD_MS)
+  {
+    s_disp_t = now;
+    memcpy(s_disp, disp, sizeof(disp));
+    s_disp_n = n;
+    s_disp_i = 0u;
+  }
+}
+
+static void PlcCan_RoomsSend(uint32_t now, uint8_t ai_link)
+{
+  for (uint8_t sent = 0u; sent < PLC_ROOM_FRAMES_PER_LOOP; )
+  {
+    if (s_rooms_i < s_rooms_n)
+    {
+      PlcCan_SendRoom(s_rooms[s_rooms_i++], now, ai_link);
+      sent++;
+    }
+    else if (s_disp_i < s_disp_n)
+    {
+      const PlcCfgDisplay *p = &s_disp[s_disp_i++];
+      uint8_t d[8] = {0};
+
+      if (p->tag == 0u) continue;
+      d[0] = (uint8_t)(p->tag & 0xFFu);
+      d[1] = (uint8_t)(p->tag >> 8);
+      d[2] = (uint8_t)(p->tag >> 16);
+      d[3] = (uint8_t)(p->tag >> 24);
+      d[4] = p->room;
+      PlcCan_SendDisplays(HVAC_CAN_ID_DISP_ROOM, FDCAN_DLC_BYTES_8, d, 0u);
+      sent++;
+    }
+    else
+    {
+      break;
+    }
+  }
 }
 
 static void PlcCan_SendDmPlc(uint8_t counter)
@@ -291,10 +461,18 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 
 void PlcCan_GetSnapshot(PlcAiSnapshot *out)
 {
+  uint32_t now = osKernelGetTickCount();
+
   taskENTER_CRITICAL();
   *out = s_snap;
   out->rx_hub = s_rx_hub;
   out->rx_drop = s_rx_drop;
+  out->src_n = s_src_n;
+  for (uint8_t i = 0u; i < s_src_n; i++)
+  {
+    out->src[i].meas = s_src[i].meas;
+    out->src[i].age_ms = now - s_src[i].t;
+  }
   taskEXIT_CRITICAL();
 }
 
@@ -382,10 +560,10 @@ uint8_t PlcCan_HubBusOk(void)
 void PlcCan_Task(void)
 {
   uint32_t last_rx;
-  uint32_t last_no_link_tx;
+  uint32_t last_ai_rx;
+  uint32_t last_room_tx;
   uint32_t last_doors_tx;
   uint32_t last_dm_tx;
-  uint8_t no_link_counter = 0u;
   uint8_t doors_counter = 0u;
   uint8_t dm_counter = 0u;
 
@@ -398,7 +576,8 @@ void PlcCan_Task(void)
   s_c3.ok = (PlcCan_Start3() == HAL_OK) ? 1u : 0u;
 
   last_rx = osKernelGetTickCount() - HVAC_AI_LINK_TIMEOUT_MS;
-  last_no_link_tx = osKernelGetTickCount() - HVAC_AI_NO_LINK_PERIOD_MS;
+  last_ai_rx = last_rx;
+  last_room_tx = osKernelGetTickCount();
   last_doors_tx = osKernelGetTickCount();
   last_dm_tx = osKernelGetTickCount();
 
@@ -412,8 +591,13 @@ void PlcCan_Task(void)
       HvacAiMeas m;
 
       hvac_can_ai_decode(f.data, &m);
-      PlcCan_SendDisplays(HVAC_CAN_ID_AI_MEAS, FDCAN_DLC_BYTES_8, f.data, f.bus);
       last_rx = osKernelGetTickCount();
+      /* NO_LINK frames come from the locomotive (its AI chain is silent), not from a module. */
+      if ((m.status & HVAC_AI_ST_NO_LINK) == 0u)
+      {
+        PlcCan_KeepSource(&m, last_rx);
+        last_ai_rx = last_rx;
+      }
 
       taskENTER_CRITICAL();
       s_snap.meas = m;
@@ -429,22 +613,22 @@ void PlcCan_Task(void)
 
     if (s_snap.init_ok) PlcCfg_Poll();
 
-    if ((now - last_rx) >= HVAC_AI_LINK_TIMEOUT_MS &&
-        (now - last_no_link_tx) >= HVAC_AI_NO_LINK_PERIOD_MS)
+    if ((now - last_rx) >= HVAC_AI_LINK_TIMEOUT_MS && (s_snap.meas.status & HVAC_AI_ST_NO_LINK) == 0u)
     {
       HvacAiMeas m = {0};
-      uint8_t d[8];
 
       m.status = HVAC_AI_ST_NO_LINK;
-      m.counter = no_link_counter++;
-      hvac_can_ai_encode(&m, d);
-      PlcCan_SendDisplays(HVAC_CAN_ID_AI_MEAS, FDCAN_DLC_BYTES_8, d, 0u);
-      last_no_link_tx = now;
-
       taskENTER_CRITICAL();
       s_snap.meas = m;
       taskEXIT_CRITICAL();
     }
+
+    if (s_snap.init_ok && (now - last_room_tx) >= HVAC_ROOM_PERIOD_MS)
+    {
+      PlcCan_RoomsPlan(now);
+      last_room_tx = now;
+    }
+    if (s_snap.init_ok) PlcCan_RoomsSend(now, ((now - last_ai_rx) < HVAC_AI_LINK_TIMEOUT_MS) ? 1u : 0u);
 
     taskENTER_CRITICAL();
     if (s_c3.dm.link && (now - s_dm_state_t) >= HVAC_DM_TIMEOUT_MS) s_c3.dm.link = 0u;

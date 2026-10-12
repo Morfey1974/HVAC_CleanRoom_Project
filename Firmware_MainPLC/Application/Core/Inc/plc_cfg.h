@@ -20,7 +20,7 @@
 #include "hvac_cfg.h"
 #include "plc_id.h"
 
-#define PLC_FW_VERSION          0x0104u /* major << 8 | minor */
+#define PLC_FW_VERSION          0x0107u /* major << 8 | minor */
 
 #define PLC_CFG_MAX_EXTRA       16u
 
@@ -107,6 +107,20 @@ uint8_t PlcCfg_UploadEnd(uint8_t *gen_out);
 void PlcCfg_GetSummary(PlcCfgSummary *out);
 /* Module i of the active configuration; returns 0 if there is no such module. */
 uint8_t PlcCfg_GetModule(uint16_t i, HvacCfgModule *m, PlcCfgModState *st);
+/* First AI channel whose sensor output measures qty (HVAC_QTY_*) and is in room (0 = any room).
+ * Returns 1 and its rail, place, channel; 0 if the configuration has none (or there is no configuration). */
+uint8_t PlcCfg_FindQuantity(uint8_t qty, uint8_t room, uint8_t *rail, uint8_t *place, uint8_t *channel);
+/* 1 when a configuration is active. */
+uint8_t PlcCfg_Present(void);
+
+typedef struct
+{
+  uint32_t tag;  /* node tag of the display found for this entry, 0 = not found */
+  uint8_t  room; /* room it shows, 0 = not chosen */
+} PlcCfgDisplay;
+
+/* Configured displays in table order; returns how many were written to out. */
+uint8_t PlcCfg_GetDisplays(PlcCfgDisplay *out, uint8_t max);
 /* Extra module i: found but not configured (rail, place set) or outside the chain (HVAC_ID_NONE). */
 uint8_t PlcCfg_GetExtra(uint8_t i, PlcIdFound *out);
 

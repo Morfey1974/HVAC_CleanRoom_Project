@@ -21,14 +21,14 @@ public record PlcConfigUploadResult(bool Ok, string? Error, int? PlcError, int? 
 /// </summary>
 public class PlcConfigService(AppDbContext db, AuditService audit, PlcFirmwareClient plc)
 {
-    private const ushort Format = 1;
+    private const ushort Format = 2;
     private const uint Magic = 0x47464348; // "HCFG"
     private const int HeaderSize = 44, ModuleSize = 8, ChannelSize = 8, ProjectLen = 24;
-    private const int MaxModules = 64, MaxChannelsPerModule = 8, MaxSize = 8192;
+    private const int MaxModules = 64, MaxChannelsPerModule = 8, MaxSize = 8192, MaxRooms = 255;
 
     private static readonly Dictionary<string, byte> Signals = new()
     {
-        ["4-20mA"] = 1, ["0-20mA"] = 2, ["0-10V"] = 3, ["2-10V"] = 4, ["0-5V"] = 5, ["PT100"] = 6, ["PT1000"] = 7, ["NTC10K"] = 8,
+        [ModuleRules.ChannelOff] = 0, ["4-20mA"] = 1, ["0-20mA"] = 2, ["0-10V"] = 3, ["2-10V"] = 4, ["0-5V"] = 5, ["PT100"] = 6, ["PT1000"] = 7, ["NTC10K"] = 8,
     };
 
     private static readonly Dictionary<string, byte> Quantities = new()
@@ -75,8 +75,15 @@ public class PlcConfigService(AppDbContext db, AuditService audit, PlcFirmwareCl
         if (!modules.Any(x => x.Kind == ModuleKind.Plc)) issues.Add(new("no_plc", null, null, true));
         if (modules.Count > MaxModules) issues.Add(new("too_many_modules", null, null, true));
 
-        var sensors = (await db.ProjectEquipment.AsNoTracking().Where(e => e.ProjectId == projectId).ToListAsync(ct))
-            .ToDictionary(e => e.Id, e => Parse<LibraryItemDto>(e.SnapshotJson)?.Outputs ?? []);
+        var equipment = await db.ProjectEquipment.AsNoTracking().Where(e => e.ProjectId == projectId).ToListAsync(ct);
+        var sensors = equipment.ToDictionary(e => e.Id, e => Parse<LibraryItemDto>(e.SnapshotJson)?.Outputs ?? []);
+        // Rooms are numbered 1..N in list order for this file only; 0 = no room.
+        var roomIndex = (await db.Rooms.AsNoTracking().Where(r => r.ProjectId == projectId)
+                .OrderBy(r => r.SortOrder).ThenBy(r => r.Name.Ru).Select(r => r.Id).ToListAsync(ct))
+            .Take(MaxRooms).Select((id, i) => (id, i)).ToDictionary(x => x.id, x => (byte)(x.i + 1));
+        byte RoomOf(Guid? id) => id is { } r && roomIndex.TryGetValue(r, out var n) ? n : (byte)0;
+        var sensorRoom = equipment.ToDictionary(e => e.Id, e => RoomOf(e.RoomId));
+        var channelRooms = new List<byte>();
 
         var moduleBytes = new List<byte[]>();
         var channelBytes = new List<byte[]>();
@@ -90,7 +97,9 @@ public class PlcConfigService(AppDbContext db, AuditService audit, PlcFirmwareCl
                 issues.Add(new("too_many_channels", x.Name, null, true));
                 count = MaxChannelsPerModule;
             }
-            moduleBytes.Add([(byte)x.Type, (byte)x.Row.Line, (byte)x.Row.Rail, (byte)x.Row.Place, (byte)count, 0, 0, 0]);
+            var displayRoom = x.Kind == ModuleKind.Display ? RoomOf(x.Row.RoomId) : (byte)0;
+            if (x.Kind == ModuleKind.Display && displayRoom == 0 && roomIndex.Count > 0) issues.Add(new("display_no_room", x.Name, null, false));
+            moduleBytes.Add([(byte)x.Type, (byte)x.Row.Line, (byte)x.Row.Rail, (byte)x.Row.Place, (byte)count, displayRoom, 0, 0]);
             dtos.Add(new(idx, x.Row.Id, x.Name, x.Id, x.Type, count));
 
             foreach (var c in (Parse<List<ModuleChannelDto>>(x.Row.ChannelsJson) ?? []).Where(c => c.Channel >= 1 && c.Channel <= count))
@@ -121,10 +130,11 @@ public class PlcConfigService(AppDbContext db, AuditService audit, PlcFirmwareCl
                 BinaryPrimitives.WriteInt16LittleEndian(b.AsSpan(4), min);
                 BinaryPrimitives.WriteInt16LittleEndian(b.AsSpan(6), max);
                 channelBytes.Add(b);
+                channelRooms.Add(output is not null && c.EquipmentId is { } se ? sensorRoom.GetValueOrDefault(se) : (byte)0);
             }
         }
 
-        var size = HeaderSize + moduleBytes.Count * ModuleSize + channelBytes.Count * ChannelSize;
+        var size = HeaderSize + moduleBytes.Count * ModuleSize + channelBytes.Count * (ChannelSize + 1);
         if (size > MaxSize) issues.Add(new("too_large", null, null, true));
 
         var blob = new byte[size];
@@ -138,6 +148,7 @@ public class PlcConfigService(AppDbContext db, AuditService audit, PlcFirmwareCl
         var pos = HeaderSize;
         foreach (var m in moduleBytes) { m.CopyTo(blob, pos); pos += ModuleSize; }
         foreach (var c in channelBytes) { c.CopyTo(blob, pos); pos += ChannelSize; }
+        foreach (var r in channelRooms) blob[pos++] = r;
 
         var crc = FirmwareImage.Crc32(blob);
         return new Built(blob, crc, new PlcConfigPreviewDto($"{crc:x8}", size, number, dtos, channelBytes.Count, issues));

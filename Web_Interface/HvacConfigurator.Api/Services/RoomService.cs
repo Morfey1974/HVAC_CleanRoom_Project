@@ -40,6 +40,7 @@ public class RoomService(AppDbContext db, AuditService audit)
         if (room is null) return false;
         audit.Add("room.delete", Label(room), Localized.ToJson(ToDto(room)), reason: reason, projectId: projectId);
         db.Rooms.Remove(room);
+        await db.ProjectModules.Where(m => m.RoomId == id).ExecuteUpdateAsync(s => s.SetProperty(m => m.RoomId, (Guid?)null), ct);
         await db.SaveChangesAsync(ct);
         return true;
     }

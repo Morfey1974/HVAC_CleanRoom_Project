@@ -101,7 +101,8 @@ public record ProjectModuleDto(
     Guid Id, Guid? LibraryItemId, int LibraryVersion, int? LibraryLatestVersion, LibraryItemDto? Snapshot,
     string Kind, int Line, int Rail, int Place, string ModuleId, string SystemName,
     LocalizedTextDto UserName, string ExpectedSerial, string Revision, string Notes,
-    bool Placed = true, double SchemeX = 0, double SchemeY = 0, IReadOnlyList<ModuleChannelDto>? Channels = null);
+    bool Placed = true, double SchemeX = 0, double SchemeY = 0, IReadOnlyList<ModuleChannelDto>? Channels = null,
+    Guid? RoomId = null);
 
 public record ProjectLinkDto(Guid Id, Guid FromModuleId, string FromPort, Guid ToModuleId, string ToPort, string Style = "step", IReadOnlyList<SchemePointDto>? Points = null);
 
@@ -122,7 +123,8 @@ public record SchemeModuleCreateRequest(Guid LibraryItemId, double X, double Y);
 public record ProjectModuleSaveRequest(
     Guid LibraryItemId, int Line, int Rail, int Place, LocalizedTextDto? UserName,
     string? ExpectedSerial, string? Revision, string? Notes, string? Reason,
-    IReadOnlyList<ModuleChannelDto>? Channels = null);
+    IReadOnlyList<ModuleChannelDto>? Channels = null,
+    Guid? RoomId = null); // displays; null keeps the current room, Guid.Empty clears it
 
 public record ProjectEquipmentDto(
     Guid Id, string Tag, int Quantity, Guid? RoomId, string Notes,

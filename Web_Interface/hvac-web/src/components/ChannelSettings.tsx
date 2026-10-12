@@ -4,6 +4,7 @@ import { api, type Equipment, type ModuleChannel, type SensorOutput } from '../a
 import { useAuth } from '../context/AuthContext';
 import { useProject } from '../context/ProjectContext';
 import { outputLabel } from '../lib/sensors';
+import { CHANNEL_OFF } from '../lib/modules';
 
 type Props = { prefix: string; count: number; modes: string[]; value: ModuleChannel[]; disabled?: boolean; onChange: (v: ModuleChannel[]) => void };
 
@@ -59,8 +60,15 @@ export function ChannelSettings({ prefix, count, modes, value, disabled, onChang
                 {prefix}
                 {n}
               </span>
-              <select value={c.mode} disabled={disabled} onChange={(e) => set(n, { mode: e.target.value })}>
+              <select
+                value={c.mode}
+                disabled={disabled}
+                onChange={(e) =>
+                  set(n, e.target.value === CHANNEL_OFF ? { mode: CHANNEL_OFF, equipmentId: null, output: null } : { mode: e.target.value })
+                }
+              >
                 <option value="">{t('channels.notSet')}</option>
+                <option value={CHANNEL_OFF}>{t('channels.modes.off')}</option>
                 {modes.map((m) => (
                   <option key={m} value={m}>
                     {t(`channels.modes.${m}`, { defaultValue: m })}
@@ -68,6 +76,7 @@ export function ChannelSettings({ prefix, count, modes, value, disabled, onChang
                 ))}
               </select>
             </label>
+            {c.mode !== CHANNEL_OFF && (
             <label>
               <span>{t('channels.sensor')}</span>
               <select value={c.equipmentId ?? ''} disabled={disabled} onChange={(e) => pickSensor(n, e.target.value)}>
@@ -79,6 +88,7 @@ export function ChannelSettings({ prefix, count, modes, value, disabled, onChang
                 ))}
               </select>
             </label>
+            )}
             {c.equipmentId && (
               <label className={c.output ? '' : 'field-missing'}>
                 <span>{t('channels.output')}</span>
