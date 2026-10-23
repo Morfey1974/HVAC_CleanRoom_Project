@@ -1,10 +1,12 @@
 using System.Text;
 using System.Text.Json;
+using HvacConfigurator.Api.Authorization;
 using HvacConfigurator.Api.Configuration;
 using HvacConfigurator.Api.Data;
 using HvacConfigurator.Api.Plc;
 using HvacConfigurator.Api.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
@@ -28,6 +30,8 @@ builder.Services.AddScoped<EquipmentService>();
 builder.Services.AddScoped<ModuleService>();
 builder.Services.AddScoped<SettingsService>();
 builder.Services.AddScoped<UserService>();
+builder.Services.AddScoped<RoleService>();
+builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
 builder.Services.AddScoped<FirmwareService>();
 builder.Services.AddScoped<PlcConfigService>();
 builder.Services.AddScoped<HmiService>();

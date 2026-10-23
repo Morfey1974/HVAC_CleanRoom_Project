@@ -4,10 +4,12 @@ public static class HmiGroups
 {
     /// <summary>Section of an air handling unit: same height for all, glued in a row on the screen.</summary>
     public const string Section = "section";
+    public const string Duct = "duct";
+    public const string Pipe = "pipe";
+    public const string Instrument = "instrument";
     public const string Equipment = "equipment";
     public const string Room = "room";
-    public const string Instrument = "instrument";
-    public static readonly string[] All = [Section, Equipment, Room, Instrument];
+    public static readonly string[] All = [Section, Duct, Pipe, Instrument, Equipment, Room];
 }
 
 public static class HmiStatuses
@@ -61,8 +63,10 @@ public class HmiScreen
     public int SortOrder { get; set; }
 
     /// <summary>
-    /// JSON. ahu: { items: [{ uid, elementId, version, code, kind, art, length, params, name, bind: { slot: tag } }] } —
-    /// each item is a copy of the library element with its version. rooms: { rooms: [{ roomId, bind: { t, rh, dp } }] }.
+    /// JSON. ahu: { items, ducts, pipes, instruments, flowTag }.
+    /// items = unit sections in airflow order; ducts join inlet/outlet (side in|out);
+    /// pipes are free-placed (x, y, rot) and snap at ends; instruments sit on a section, duct or pipe (hostUid).
+    /// rooms: { rooms: [{ roomId, bind: { t, rh, dp } }] }.
     /// </summary>
     public string ContentJson { get; set; } = "{}";
 

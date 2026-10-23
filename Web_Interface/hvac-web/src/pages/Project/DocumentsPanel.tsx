@@ -9,14 +9,15 @@ import { useConfirm } from '../../components/Dialog';
 /** Project files; with `kind` shows and uploads only that kind. */
 export function DocumentsPanel({ kind }: { kind?: DocumentKind }) {
   const { t, i18n } = useTranslation();
-  const { token, hasRole } = useAuth();
+  const { token, can } = useAuth();
   const { projectId, reload: reloadProject } = useProject();
   const [docs, setDocs] = useState<ProjectDocument[]>([]);
   const [uploadKind, setUploadKind] = useState<DocumentKind>(kind ?? 'pid');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const confirm = useConfirm();
-  const canEdit = hasRole('Engineer');
+  const canUpload = can('documents.upload');
+  const canDelete = can('documents.delete');
 
   const load = useCallback(() => {
     if (token) api.documents(token, projectId).then(setDocs).catch((e: Error) => setError(e.message));
@@ -61,7 +62,7 @@ export function DocumentsPanel({ kind }: { kind?: DocumentKind }) {
 
   return (
     <div className="card">
-      {canEdit && (
+      {canUpload && (
         <div className="upload-bar">
           {!kind && (
             <select value={uploadKind} onChange={(e) => setUploadKind(e.target.value as DocumentKind)}>
@@ -115,7 +116,7 @@ export function DocumentsPanel({ kind }: { kind?: DocumentKind }) {
                   {formatDateTime(d.uploadedAt, i18n.language)} · {d.uploadedBy}
                 </td>
                 <td className="row-actions">
-                  {canEdit && (
+                  {canDelete && (
                     <button type="button" className="btn btn-small btn-danger" onClick={() => remove(d)}>
                       {t('common.delete')}
                     </button>

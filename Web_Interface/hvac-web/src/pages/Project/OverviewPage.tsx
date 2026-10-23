@@ -14,14 +14,14 @@ type Readiness = { key: string; to: string; state: 'done' | 'todo' | 'later'; de
 
 export function OverviewPage() {
   const { t, i18n } = useTranslation();
-  const { token, hasRole } = useAuth();
+  const { token, can } = useAuth();
   const { project, projectId, setProject, reload } = useProject();
   const navigate = useNavigate();
   const [docs, setDocs] = useState<ProjectDocument[]>([]);
   const [edit, setEdit] = useState<ProjectSave | null>(null);
   const [error, setError] = useState('');
   const confirm = useConfirm();
-  const canEdit = hasRole('Engineer');
+  const canEdit = can('projects.edit');
 
   useEffect(() => {
     if (token)
@@ -166,7 +166,7 @@ export function OverviewPage() {
           ) : (
             <>
               <p className="muted">{t('overview.siteInactive')}</p>
-              {hasRole('Admin') && !project.isArchived && (
+              {can('projects.activate') && !project.isArchived && (
                 <button type="button" className="btn btn-primary" onClick={activate}>
                   {t('overview.activate')}
                 </button>

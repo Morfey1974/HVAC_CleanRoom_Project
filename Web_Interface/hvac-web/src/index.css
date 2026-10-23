@@ -1167,6 +1167,48 @@ label.btn.disabled {
   margin: 0 0 0.75rem;
 }
 
+.reports-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.reports-grid .card {
+  margin-top: 0;
+}
+
+.reports-grid h2 {
+  font-size: 1.05rem;
+  margin: 0 0 0.5rem;
+}
+
+.reports-period {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0.75rem 0;
+}
+
+.reports-period label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+}
+
+.settings-check {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.settings-check .field-hint {
+  flex-basis: 100%;
+  margin: 0;
+}
+
 .readiness {
   list-style: none;
   padding: 0;

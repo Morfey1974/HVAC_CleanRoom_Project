@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   api,
+  hmiPaletteGroups,
   type HmiAhuItem,
   type HmiElement,
+  type HmiGroup,
   type HmiRoomItem,
   type HmiScreen,
   type HmiScreenContent,
@@ -16,9 +18,12 @@ import { useProject } from '../../context/ProjectContext';
 import { pickName } from '../../lib/localized';
 import { BidiText, bidiAutoInput } from '../../components/BidiText';
 import { useConfirm } from '../../components/Dialog';
-import { AhuView } from '../../hmi/AhuView';
+import { AhuView, ahuScreenProps } from '../../hmi/AhuView';
+import { openHmiPreview } from '../../hmi/panel';
+import { HmiPackBooth } from '../../hmi/HmiPackBooth';
 import { RoomTiles } from '../../hmi/RoomTiles';
-import { formatSlot, hmiStates, slotsFor, type HmiState } from '../../hmi/arts';
+import { artsForGroup, formatSlot, hmiStates, slotsFor, type HmiState } from '../../hmi/arts';
+import { rotatePipeItem } from '../../hmi/pipeGeom';
 import { DamperWiring } from '../Hmi/HmiLibraryPage';
 import { HmiElementPreview } from '../Hmi/HmiLibraryPage';
 
@@ -39,11 +44,11 @@ export const itemFromElement = (e: HmiElement, bind: Record<string, string> = {}
 
 export function HmiScreensPage() {
   const { t, i18n } = useTranslation();
-  const { token, hasRole } = useAuth();
+  const { token, can } = useAuth();
   const { projectId, project } = useProject();
   const { snapshot } = useLive();
   const confirm = useConfirm();
-  const canEdit = hasRole('Engineer');
+  const canEdit = can('hmi.screens.edit');
   const [screens, setScreens] = useState<HmiScreen[] | null>(null);
   const [library, setLibrary] = useState<HmiElement[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -54,6 +59,10 @@ export function HmiScreensPage() {
   const [drafts, setDrafts] = useState(false);
   const [view, setView] = useState<'live' | HmiState>('live');
   const [error, setError] = useState('');
+  const [exporting, setExporting] = useState(false);
+  const [shelf, setShelf] = useState<HmiGroup>('section');
+  const [placing, setPlacing] = useState<HmiAhuItem | null>(null);
+  const placingHold = useRef<HmiAhuItem | null>(null);
 
   const values = project?.isActiveOnSite ? snapshot?.values : undefined;
   const tags = useMemo(() => Object.keys(snapshot?.values ?? {}).sort(), [snapshot?.values]);
@@ -135,10 +144,79 @@ export function HmiScreensPage() {
   };
   const setContent = (c: Partial<HmiScreenContent>) => draft && patch({ content: { ...draft.content, ...c } });
   const items = draft?.content.items ?? [];
+  const ducts = draft?.content.ducts ?? [];
+  const pipes = draft?.content.pipes ?? [];
+  const instruments = draft?.content.instruments ?? [];
   const setItems = (next: HmiAhuItem[]) => setContent({ items: next });
-  const sel = items.find((i) => i.uid === selected) ?? null;
-  const selIdx = sel ? items.indexOf(sel) : -1;
+  const setDucts = (next: HmiAhuItem[]) => setContent({ ducts: next });
+  const setPipes = (next: HmiAhuItem[]) => setContent({ pipes: next });
+  const setInstruments = (next: HmiAhuItem[]) => setContent({ instruments: next });
+  const placed = [...items, ...ducts, ...pipes, ...instruments];
+  const sel = placed.find((i) => i.uid === selected) ?? null;
+  const selKind: HmiGroup | null = !sel ? null : items.includes(sel) ? 'section' : ducts.includes(sel) ? 'duct' : pipes.includes(sel) ? 'pipe' : 'instrument';
+  const selIdx = sel && selKind === 'section' ? items.indexOf(sel) : -1;
   const selLib = sel ? library.find((e) => e.id === sel.elementId) : undefined;
+  const addFromLibrary = (e: HmiElement) => {
+    setError('');
+    const it = itemFromElement(e);
+    if (e.group === 'section') {
+      setItems([...items, it]);
+      setSelected(it.uid);
+      return;
+    }
+    if (e.group === 'duct') {
+      const onDuct = ducts.find((d) => d.uid === selected);
+      const onInlet = items.find((i) => i.uid === selected)?.art === 'inlet';
+      const side: 'in' | 'out' = onDuct?.side ?? (onInlet ? 'in' : 'out');
+      const next = { ...it, side };
+      setDucts([...ducts, next]);
+      setSelected(next.uid);
+      return;
+    }
+    if (e.group === 'instrument') {
+      const host = sel && (items.includes(sel) || ducts.includes(sel) || pipes.includes(sel)) ? sel.uid : null;
+      if (!host) {
+        setError(t('hmi.needHost'));
+        return;
+      }
+      const next = { ...it, hostUid: host };
+      setInstruments([...instruments, next]);
+      setSelected(next.uid);
+    }
+  };
+
+  const dropPipe = (it: HmiAhuItem) => {
+    placingHold.current = null;
+    setDraft((d) => (d ? { ...d, content: { ...d.content, pipes: [...(d.content.pipes ?? []), it] } } : d));
+    setDirty(true);
+    setSelected(it.uid);
+    setPlacing(null);
+  };
+  const movePipe = (uid: string, x: number, y: number) => {
+    setDraft((d) =>
+      d ? { ...d, content: { ...d.content, pipes: (d.content.pipes ?? []).map((p) => (p.uid === uid ? { ...p, x, y, hostUid: undefined } : p)) } } : d,
+    );
+    setDirty(true);
+  };
+
+  const removeSel = () => {
+    if (!sel) return;
+    const uid = sel.uid;
+    setContent({
+      items: selKind === 'section' ? items.filter((i) => i.uid !== uid) : items,
+      ducts: selKind === 'duct' ? ducts.filter((i) => i.uid !== uid) : ducts,
+      pipes: pipes.filter((p) => p.uid !== uid && p.hostUid !== uid),
+      instruments: instruments.filter((p) => p.uid !== uid && p.hostUid !== uid),
+    });
+    setSelected(null);
+  };
+
+  const replaceSel = (next: HmiAhuItem) => {
+    if (selKind === 'section') setItems(items.map((i) => (i.uid === next.uid ? next : i)));
+    else if (selKind === 'duct') setDucts(ducts.map((i) => (i.uid === next.uid ? next : i)));
+    else if (selKind === 'pipe') setPipes(pipes.map((i) => (i.uid === next.uid ? next : i)));
+    else setInstruments(instruments.map((i) => (i.uid === next.uid ? next : i)));
+  };
 
   const moveItem = (from: number, to: number) => {
     const next = [...items];
@@ -147,7 +225,13 @@ export function HmiScreensPage() {
     setItems(next);
   };
 
-  const palette = library.filter((e) => e.group === 'section' && (drafts || e.status === 'approved'));
+  const paletteOf = (g: HmiGroup) =>
+    library.filter((e) => e.group === g && (drafts || e.status === 'approved') && artsForGroup(g).includes(e.art));
+
+  const packScreens = (screens ?? [])
+    .map((s) => (draft && s.id === draft.id ? draft : s))
+    .slice()
+    .sort((a, b) => a.sortOrder - b.sortOrder);
 
   if (!screens) return <div className="page"><p className="muted">{t('common.loading')}</p></div>;
 
@@ -155,18 +239,46 @@ export function HmiScreensPage() {
     <div className="page">
       <div className="page-header">
         <h1>{t('projectNav.mnemo')}</h1>
-        {canEdit && (
-          <div className="row-actions">
-            <button type="button" className="btn btn-ghost-inline" onClick={() => add('ahu')}>
-              + {t('hmi.addAhu')}
+        <div className="row-actions">
+          {draft && (
+            <button
+              type="button"
+              className="btn btn-ghost-inline"
+              onClick={() => openHmiPreview(projectId, draft, view)}
+            >
+              {t('hmi.panelPreview')}
             </button>
-            <button type="button" className="btn btn-ghost-inline" onClick={() => add('rooms')}>
-              + {t('hmi.addRooms')}
+          )}
+          {screens.length > 0 && (
+            <button type="button" className="btn btn-ghost-inline" disabled={exporting} onClick={() => setExporting(true)}>
+              {exporting ? t('hmi.panelExporting') : t('hmi.panelExport')}
             </button>
-          </div>
-        )}
+          )}
+          {canEdit && (
+            <>
+              <button type="button" className="btn btn-ghost-inline" onClick={() => add('ahu')}>
+                + {t('hmi.addAhu')}
+              </button>
+              <button type="button" className="btn btn-ghost-inline" onClick={() => add('rooms')}>
+                + {t('hmi.addRooms')}
+              </button>
+            </>
+          )}
+        </div>
       </div>
       <p className="muted">{t('hmi.screensHint')}</p>
+      {exporting && (
+        <HmiPackBooth
+          projectId={projectId}
+          screens={packScreens}
+          rooms={rooms}
+          onDone={() => setExporting(false)}
+          onError={(m) => {
+            setExporting(false);
+            setError(t(`hmi.errors.${m}`, { defaultValue: m }));
+          }}
+        />
+      )}
       {error && <div className="error-banner">{error}</div>}
 
       {screens.length === 0 && <div className="card muted">{t('hmi.noScreens')}</div>}
@@ -214,18 +326,42 @@ export function HmiScreensPage() {
                       {t('hmi.showDrafts')}
                     </label>
                   </div>
-                  <div className="hmi-palette">
-                    {palette.map((e) => (
-                      <button key={e.id} type="button" className="hmi-palette__item" title={t('hmi.clickToAdd')} onClick={() => setItems([...items, itemFromElement(e)])}>
-                        <HmiElementPreview e={e} state="running" />
-                        <span className="small">
-                          <BidiText>{pickName(e.name, i18n.language).value}</BidiText>
-                          {e.status === 'draft' && <span className="badge badge--warn">{t('hmi.status.draft')}</span>}
-                        </span>
+                  <div className="tabs tabs--inline tabs--small">
+                    {hmiPaletteGroups.map((g) => (
+                      <button key={g} type="button" className={shelf === g ? 'tab active' : 'tab'} onClick={() => setShelf(g)}>
+                        {t(`hmi.groups.${g}`)}
                       </button>
                     ))}
                   </div>
-                  <span className="field-hint">{t('hmi.paletteHint')}</span>
+                  <div className="hmi-shelf">
+                    <div className="hmi-palette">
+                      {paletteOf(shelf).map((e) => (
+                        <button
+                          key={e.id}
+                          type="button"
+                          className={`hmi-palette__item ${shelf === 'pipe' ? 'hmi-palette__item--pipe' : ''}`}
+                          title={t(`hmi.paletteHint.${shelf}`)}
+                          onClick={() => {
+                            if (shelf !== 'pipe') addFromLibrary(e);
+                          }}
+                          onPointerDown={(ev) => {
+                            if (shelf !== 'pipe') return;
+                            ev.preventDefault();
+                            const it = itemFromElement(e);
+                            placingHold.current = it;
+                            setPlacing(it);
+                          }}
+                        >
+                          <HmiElementPreview e={e} state="running" />
+                          <span className="small">
+                            <BidiText>{pickName(e.name, i18n.language).value}</BidiText>
+                            {e.status === 'draft' && <span className="badge badge--warn">{t('hmi.status.draft')}</span>}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <span className="field-hint">{t(`hmi.paletteHint.${shelf}`)}</span>
                 </div>
               )}
 
@@ -237,19 +373,25 @@ export function HmiScreensPage() {
                     </button>
                   ))}
                 </div>
-                {items.length === 0 ? (
+                {items.length === 0 && ducts.length === 0 && pipes.length === 0 && (
                   <p className="muted">{t('hmi.emptyAhu')}</p>
-                ) : (
-                  <AhuView
-                    items={items}
-                    values={values}
-                    flowTag={draft.content.flowTag}
-                    demo={view === 'live' ? undefined : view}
-                    selected={selected}
-                    onSelect={canEdit ? setSelected : undefined}
-                    onMove={canEdit ? moveItem : undefined}
-                  />
                 )}
+                <AhuView
+                  {...ahuScreenProps(draft.content)}
+                  values={values}
+                  demo={view === 'live' ? undefined : view}
+                  selected={selected}
+                  onSelect={canEdit ? setSelected : undefined}
+                  onMove={canEdit ? moveItem : undefined}
+                  placing={placing}
+                  placingHold={placingHold}
+                  onDropPipe={canEdit ? dropPipe : undefined}
+                  onCancelPlace={() => {
+                    placingHold.current = null;
+                    setPlacing(null);
+                  }}
+                  onPipeMove={canEdit ? movePipe : undefined}
+                />
               </div>
 
               {canEdit && (
@@ -272,31 +414,54 @@ export function HmiScreensPage() {
                       </span>
                     </b>
                     <div className="row-actions">
-                      <button type="button" className="btn btn-small btn-ghost-inline" disabled={selIdx <= 0} onClick={() => moveItem(selIdx, selIdx - 1)}>
-                        ←
-                      </button>
-                      <button type="button" className="btn btn-small btn-ghost-inline" disabled={selIdx >= items.length - 1} onClick={() => moveItem(selIdx, selIdx + 1)}>
-                        →
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-small btn-ghost-inline"
-                        onClick={() => {
-                          setItems(items.filter((i) => i.uid !== sel.uid));
-                          setSelected(null);
-                        }}
-                      >
+                      {selKind === 'section' && (
+                        <>
+                          <button type="button" className="btn btn-small btn-ghost-inline" disabled={selIdx <= 0} onClick={() => moveItem(selIdx, selIdx - 1)}>
+                            ←
+                          </button>
+                          <button type="button" className="btn btn-small btn-ghost-inline" disabled={selIdx >= items.length - 1} onClick={() => moveItem(selIdx, selIdx + 1)}>
+                            →
+                          </button>
+                        </>
+                      )}
+                      <button type="button" className="btn btn-small btn-ghost-inline" onClick={removeSel}>
                         {t('hmi.removeSection')}
                       </button>
                     </div>
                   </div>
+                  {selKind === 'duct' && (
+                    <label>
+                      {t('hmi.ductSide')}
+                      <select value={sel.side ?? 'out'} onChange={(e) => replaceSel({ ...sel, side: e.target.value as 'in' | 'out' })}>
+                        <option value="in">{t('hmi.sides.in')}</option>
+                        <option value="out">{t('hmi.sides.out')}</option>
+                      </select>
+                    </label>
+                  )}
+                  {selKind === 'pipe' && (
+                    <div className="form-grid-2">
+                      <button type="button" className="btn btn-small btn-ghost-inline" onClick={() => replaceSel(rotatePipeItem(sel))}>
+                        {t('hmi.rotate')}
+                      </button>
+                      <label>
+                        {t('hmi.fluid')}
+                        <select
+                          value={sel.params?.fluid ?? 'cold'}
+                          onChange={(e) => replaceSel({ ...sel, params: { ...sel.params, fluid: e.target.value as 'cold' | 'hot' } })}
+                        >
+                          <option value="cold">{t('hmi.fluids.cold')}</option>
+                          <option value="hot">{t('hmi.fluids.hot')}</option>
+                        </select>
+                      </label>
+                    </div>
+                  )}
                   {selLib && selLib.version > sel.version && (
                     <div className="warning-banner">
                       {t('hmi.newerInLibrary', { v: selLib.version })}{' '}
                       <button
                         type="button"
                         className="btn btn-small btn-ghost-inline"
-                        onClick={() => setItems(items.map((i) => (i.uid === sel.uid ? { ...itemFromElement(selLib, i.bind), uid: i.uid } : i)))}
+                        onClick={() => replaceSel({ ...itemFromElement(selLib, sel.bind), uid: sel.uid, side: sel.side, hostUid: sel.hostUid, x: sel.x, y: sel.y, rot: sel.rot })}
                       >
                         {t('hmi.updateFromLibrary')}
                       </button>
@@ -313,7 +478,7 @@ export function HmiScreensPage() {
                           dir="ltr"
                           list="hmi-tags"
                           value={sel.bind[s.key] ?? ''}
-                          onChange={(e) => setItems(items.map((i) => (i.uid === sel.uid ? { ...i, bind: { ...i.bind, [s.key]: e.target.value } } : i)))}
+                          onChange={(e) => replaceSel({ ...sel, bind: { ...sel.bind, [s.key]: e.target.value } })}
                         />
                         {sel.bind[s.key] && values && <span className="field-hint ltr-value">{formatSlot(values[sel.bind[s.key]], s)}</span>}
                       </label>

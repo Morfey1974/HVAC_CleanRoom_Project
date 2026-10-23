@@ -60,6 +60,43 @@ namespace HvacConfigurator.Api.Migrations
                     b.ToTable("AlarmEvents");
                 });
 
+            modelBuilder.Entity("HvacConfigurator.Api.Entities.AppRole", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsBuiltIn")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PermissionsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.ToTable("Roles", (string)null);
+                });
+
             modelBuilder.Entity("HvacConfigurator.Api.Entities.AuditEntry", b =>
                 {
                     b.Property<long>("Id")
@@ -724,17 +761,54 @@ namespace HvacConfigurator.Api.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("Role")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
+                    b.Property<Guid>("RoleId")
+                        .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
                     b.HasIndex("Login")
                         .IsUnique();
 
+                    b.HasIndex("RoleId");
+
                     b.ToTable("Users");
+                });
+
+            modelBuilder.Entity("HvacConfigurator.Api.Entities.AppRole", b =>
+                {
+                    b.OwnsOne("HvacConfigurator.Api.Entities.LocalizedText", "Name", b1 =>
+                        {
+                            b1.Property<Guid>("AppRoleId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<string>("En")
+                                .IsRequired()
+                                .HasMaxLength(120)
+                                .HasColumnType("character varying(120)")
+                                .HasColumnName("NameEn");
+
+                            b1.Property<string>("He")
+                                .IsRequired()
+                                .HasMaxLength(120)
+                                .HasColumnType("character varying(120)")
+                                .HasColumnName("NameHe");
+
+                            b1.Property<string>("Ru")
+                                .IsRequired()
+                                .HasMaxLength(120)
+                                .HasColumnType("character varying(120)")
+                                .HasColumnName("NameRu");
+
+                            b1.HasKey("AppRoleId");
+
+                            b1.ToTable("Roles");
+
+                            b1.WithOwner()
+                                .HasForeignKey("AppRoleId");
+                        });
+
+                    b.Navigation("Name")
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("HvacConfigurator.Api.Entities.HmiElement", b =>
@@ -1029,6 +1103,22 @@ namespace HvacConfigurator.Api.Migrations
 
                     b.Navigation("Name")
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("HvacConfigurator.Api.Entities.User", b =>
+                {
+                    b.HasOne("HvacConfigurator.Api.Entities.AppRole", "RoleRef")
+                        .WithMany("Users")
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("RoleRef");
+                });
+
+            modelBuilder.Entity("HvacConfigurator.Api.Entities.AppRole", b =>
+                {
+                    b.Navigation("Users");
                 });
 
             modelBuilder.Entity("HvacConfigurator.Api.Entities.Project", b =>

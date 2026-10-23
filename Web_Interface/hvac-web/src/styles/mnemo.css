@@ -109,9 +109,23 @@
 .hmi-canvas {
   direction: ltr;
   overflow-x: auto;
-  background: linear-gradient(180deg, #f4f8fc 0%, #e6edf5 100%);
+  background: linear-gradient(180deg, #eceff3 0%, #d5dbe3 100%);
   border-radius: 6px;
   color: #1e293b;
+}
+
+.hmi-canvas--fit {
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hmi-canvas--still .hmi-fan-impeller {
+  display: none;
 }
 
 .hmi-host {
@@ -144,6 +158,7 @@
 
 .hmi-arrow--on {
   animation: hmi-arrow 1.2s ease-in-out infinite;
+  filter: drop-shadow(0 1px 1px rgba(15, 23, 42, 0.35));
 }
 
 @keyframes hmi-arrow {
@@ -158,8 +173,48 @@
   }
 }
 
+.hmi-flow-arrow {
+  animation: hmi-flow-arrow 1.4s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@keyframes hmi-flow-arrow {
+  0% {
+    transform: translateX(-10px);
+    opacity: 0;
+  }
+  22% {
+    opacity: 1;
+  }
+  78% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(16px);
+    opacity: 0;
+  }
+}
+
+.hmi-filter-chip {
+  filter: drop-shadow(0 1px 2px rgba(15, 23, 42, 0.35));
+}
+
 .hmi-mist {
   animation: hmi-mist 1.6s ease-in-out infinite;
+}
+
+.hmi-stream {
+  animation: hmi-stream 1.8s linear infinite;
+}
+
+@keyframes hmi-stream {
+  from {
+    stroke-dashoffset: 24;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
 }
 
 @keyframes hmi-mist {
@@ -173,6 +228,106 @@
   max-width: none;
   font-family: 'Segoe UI', Arial, sans-serif;
   touch-action: none;
+}
+
+.hmi-svg--fit {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+body.hmi-panel-page {
+  margin: 0;
+  min-height: 100vh;
+  background: #111;
+  overflow: hidden;
+}
+
+body.hmi-panel-page #root {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #111;
+}
+
+.hmi-panel {
+  box-sizing: border-box;
+  border: 3px solid #fff;
+  background: #d5dbe3;
+  overflow: hidden;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.hmi-panel__shot {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+}
+
+.hmi-panel__overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.hmi-canvas--overlay {
+  background: transparent;
+}
+
+.hmi-panel__tabs {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  background: #c8c8c8;
+  z-index: 2;
+}
+
+.hmi-panel__badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: #1e515c;
+  margin-right: 6px;
+}
+
+.hmi-panel__tab {
+  border: 0;
+  background: #e6e6e6;
+  color: #111;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.hmi-panel__tab.is-on {
+  background: #296b7a;
+  color: #fff;
+}
+
+.hmi-capture-host {
+  position: fixed;
+  left: -2000px;
+  top: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.hmi-panel__msg {
+  margin: 0;
+  padding: 1.5rem;
+  color: #334155;
 }
 
 .hmi-preview-svg {
@@ -228,11 +383,21 @@
   font-weight: 600;
 }
 
+.hmi-shelf {
+  margin-top: 0.65rem;
+}
+
+.hmi-shelf__title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin: 0 0 0.3rem;
+}
+
 .hmi-palette {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-  margin: 0.5rem 0;
+  margin: 0.15rem 0 0.35rem;
 }
 
 .hmi-palette__item {
@@ -250,6 +415,22 @@
 
 .hmi-palette__item:hover {
   border-color: var(--primary);
+}
+
+.hmi-palette__item--pipe {
+  cursor: grab;
+}
+
+.hmi-palette__item--pipe:active {
+  cursor: grabbing;
+}
+
+.hmi-pipe {
+  cursor: grab;
+}
+
+.hmi-pipe--drag {
+  cursor: grabbing;
 }
 
 .hmi-palette__item .hmi-canvas {

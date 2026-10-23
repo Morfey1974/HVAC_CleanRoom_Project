@@ -8,7 +8,7 @@ import { SiteOnly } from './MonitoringPage';
 
 export function AlarmsPage() {
   const { t, i18n } = useTranslation();
-  const { token, hasRole } = useAuth();
+  const { token, can } = useAuth();
   const { alarmsVersion } = useLive();
   const [activeOnly, setActiveOnly] = useState(true);
   const [rows, setRows] = useState<AlarmEvent[]>([]);
@@ -67,7 +67,7 @@ export function AlarmsPage() {
                   <td className="ltr-value">{a.clearedAt ? formatDateTime(a.clearedAt, i18n.language) : t('alarms.stillActive')}</td>
                   <td>{a.ackBy ? `${a.ackBy} · ${formatDateTime(a.ackAt, i18n.language)}` : ''}</td>
                   <td>
-                    {!a.ackAt && hasRole('Operator') && (
+                    {!a.ackAt && can('alarms.ack') && (
                       <button type="button" className="btn btn-small btn-primary" onClick={() => ack(a.id)}>
                         {t('alarms.ack')}
                       </button>

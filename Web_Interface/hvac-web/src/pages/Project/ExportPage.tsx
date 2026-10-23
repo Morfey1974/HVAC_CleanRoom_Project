@@ -35,7 +35,7 @@ function duration(ms: number) {
 /** Project configuration -> Main PLC, and how the PLC applied it to the real modules. */
 export function ExportPage() {
   const { t } = useTranslation();
-  const { token } = useAuth();
+  const { token, can } = useAuth();
   const { project, projectId } = useProject();
   const confirm = useConfirm();
   const [view, setView] = useState<PlcConfigView | null>(null);
@@ -120,7 +120,7 @@ export function ExportPage() {
   const plc = view.plc;
   const blocking = b.issues.some((i) => i.blocking);
   const active = !!project?.isActiveOnSite;
-  const canUpload = active && view.online && !blocking && !busy;
+  const canUpload = can('plc.config.upload') && active && view.online && !blocking && !busy;
 
   const issueText = (i: PlcConfigIssue) => t(`plcConfig.issueCodes.${i.code}`, { module: i.module ?? '', channel: i.channel ?? '', defaultValue: i.code });
 
@@ -172,9 +172,11 @@ export function ExportPage() {
               ))}
             </ul>
           )}
-          <button type="button" className="btn btn-primary mt" disabled={!canUpload} onClick={upload}>
-            {busy ? t('plcConfig.uploading') : t('plcConfig.upload')}
-          </button>
+          {can('plc.config.upload') && (
+            <button type="button" className="btn btn-primary mt" disabled={!canUpload} onClick={upload}>
+              {busy ? t('plcConfig.uploading') : t('plcConfig.upload')}
+            </button>
+          )}
         </div>
 
         <div className="card">

@@ -28,7 +28,7 @@ const isHub = (m: ProjectModule) => m.snapshot?.typeCode === HUB_TYPE;
 
 export function HardwarePage() {
   const { t, i18n } = useTranslation();
-  const { token, hasRole } = useAuth();
+  const { token, can } = useAuth();
   const { projectId, reload: reloadProject } = useProject();
   const confirm = useConfirm();
   const [rows, setRows] = useState<ProjectModule[]>([]);
@@ -36,7 +36,7 @@ export function HardwarePage() {
   const [edit, setEdit] = useState<Edit | null>(null);
   const [error, setError] = useState('');
   const [formError, setFormError] = useState('');
-  const canEdit = hasRole('Engineer');
+  const canEdit = can('hardware.edit');
   const name = (n: { ru: string; en: string; he: string }) => pickName(n, i18n.language).value;
   const errText = (m: string) => t(`hardware.errors.${m}`, { defaultValue: m });
 

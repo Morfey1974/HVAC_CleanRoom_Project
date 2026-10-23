@@ -1,3 +1,4 @@
+using HvacConfigurator.Api.Authorization;
 using HvacConfigurator.Api.Plc;
 using HvacConfigurator.Api.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -7,7 +8,7 @@ namespace HvacConfigurator.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "Engineer,Admin")]
+[HasPermission(Perm.FirmwareView)]
 public class FirmwareController(FirmwareService firmware, PlcFirmwareClient plc) : ControllerBase
 {
     private const long MaxUploadBytes = 8 * 1024 * 1024;
@@ -17,6 +18,7 @@ public class FirmwareController(FirmwareService firmware, PlcFirmwareClient plc)
 
     /// <summary>Accepts the module .bin (from the application start) or .elf.</summary>
     [HttpPost]
+    [HasPermission(Perm.FirmwareManage)]
     [RequestSizeLimit(MaxUploadBytes)]
     [RequestFormLimits(MultipartBodyLengthLimit = MaxUploadBytes)]
     public async Task<IActionResult> Upload(IFormFile file, [FromForm] string? notes, CancellationToken ct)
@@ -30,6 +32,7 @@ public class FirmwareController(FirmwareService firmware, PlcFirmwareClient plc)
     public async Task<IActionResult> Builds(CancellationToken ct) => Ok(await firmware.BuildsAsync(ct));
 
     [HttpPost("from-build")]
+    [HasPermission(Perm.FirmwareManage)]
     public async Task<IActionResult> FromBuild([FromQuery] int type, CancellationToken ct)
     {
         var (f, err) = await firmware.AddFromBuildAsync(type, ct);
@@ -43,14 +46,17 @@ public class FirmwareController(FirmwareService firmware, PlcFirmwareClient plc)
             : NotFound();
 
     [HttpDelete("{id:guid}")]
+    [HasPermission(Perm.FirmwareManage)]
     public async Task<IActionResult> Delete(Guid id, [FromQuery] string? reason, CancellationToken ct) =>
         await firmware.DeleteAsync(id, reason, ct) ? NoContent() : NotFound();
 
     [HttpPost("{id:guid}/send")]
+    [HasPermission(Perm.FirmwareManage)]
     public async Task<IActionResult> Send(Guid id, [FromQuery] string? reason, CancellationToken ct) =>
         await firmware.SendToPlcAsync(id, reason, ct) is { } r ? Ok(r) : NotFound();
 
     [HttpPost("run")]
+    [HasPermission(Perm.FirmwareManage)]
     public async Task<IActionResult> Run([FromQuery] int type, [FromQuery] int mode, [FromQuery] string? reason, CancellationToken ct)
     {
         if (type is < 1 or > FirmwareImage.MaxModuleType || mode is < 1 or > 2) return BadRequest(new { message = "bad_args" });
@@ -58,6 +64,7 @@ public class FirmwareController(FirmwareService firmware, PlcFirmwareClient plc)
     }
 
     [HttpPost("rollback")]
+    [HasPermission(Perm.FirmwareManage)]
     public async Task<IActionResult> Rollback([FromQuery] int type, [FromQuery] string? reason, CancellationToken ct)
     {
         if (type is < 1 or > FirmwareImage.MaxModuleType) return BadRequest(new { message = "bad_args" });
@@ -66,9 +73,11 @@ public class FirmwareController(FirmwareService firmware, PlcFirmwareClient plc)
 
     /// <summary>New search of module places (IDs) on all lines.</summary>
     [HttpPost("id-walk")]
+    [HasPermission(Perm.FirmwareManage)]
     public async Task<IActionResult> IdWalk(CancellationToken ct) => Ok(await firmware.IdWalkAsync(ct));
 
     [HttpPost("cancel")]
+    [HasPermission(Perm.FirmwareManage)]
     public async Task<IActionResult> Cancel(CancellationToken ct) => Ok(await firmware.CancelAsync(ct));
 
     /// <summary>PLC firmware state as {online, stale, uploading, error, plc: raw PLC JSON}.</summary>

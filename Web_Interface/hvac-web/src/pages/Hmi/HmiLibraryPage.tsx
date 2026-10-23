@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { api, hmiGroups, type HmiDrive, type HmiElement, type HmiElementSave, type HmiGroup, type HmiParams } from '../../api/client';
+import { api, hmiShelfGroups, type HmiDrive, type HmiElement, type HmiElementSave, type HmiGroup, type HmiParams } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { formatDate, pickName } from '../../lib/localized';
 import { BidiText, bidiAutoInput } from '../../components/BidiText';
 import { useConfirm } from '../../components/Dialog';
 import { Modal } from '../../components/Modal';
-import { arts, damperControls, damperFeedbacks, damperSupplies, hmiStates, sectionArts, type HmiState } from '../../hmi/arts';
+import { artsForGroup, damperControls, damperFeedbacks, damperSupplies, hmiStates, sectionArts, type HmiState } from '../../hmi/arts';
 import { AhuView } from '../../hmi/AhuView';
 import { ArtPreview } from '../../hmi/RoomTiles';
 
@@ -45,14 +45,15 @@ export function DamperWiring({ art, p }: { art: string; p: HmiParams }) {
 
 export function HmiLibraryPage() {
   const { t, i18n } = useTranslation();
-  const { token, hasRole } = useAuth();
+  const { token, can } = useAuth();
   const confirm = useConfirm();
-  const canEdit = hasRole('Engineer');
+  const canEdit = can('hmi.library.edit');
   const [archived, setArchived] = useState(false);
   const [items, setItems] = useState<HmiElement[] | null>(null);
   const [state, setState] = useState<HmiState>('running');
   const [edit, setEdit] = useState<Edit | null>(null);
   const [error, setError] = useState('');
+  const [shelf, setShelf] = useState<HmiGroup>('section');
 
   const load = useCallback(() => {
     if (token) api.hmiElements(token, archived).then(setItems).catch((e: Error) => setError(e.message));
@@ -75,7 +76,7 @@ export function HmiLibraryPage() {
       id: null,
       version: 0,
       used: 0,
-      data: { code: '', group, kind: '', art: group === 'room' ? 'roomTile' : 'filter', name: { ru: '', en: '', he: '' }, description: '', length: 80, params: {}, status: 'draft' },
+      data: { code: '', group, kind: '', art: artsForGroup(group)[0] ?? 'filter', name: { ru: '', en: '', he: '' }, description: '', length: 80, params: {}, status: 'draft' },
     });
 
   const openEdit = (e: HmiElement) =>
@@ -121,6 +122,13 @@ export function HmiLibraryPage() {
 
       <div className="toolbar">
         <div className="tabs tabs--inline">
+          {hmiShelfGroups.map((g) => (
+            <button key={g} type="button" className={shelf === g ? 'tab active' : 'tab'} onClick={() => setShelf(g)}>
+              {t(`hmi.groups.${g}`)}
+            </button>
+          ))}
+        </div>
+        <div className="tabs tabs--inline tabs--small">
           {hmiStates.map((s) => (
             <button key={s} type="button" className={state === s ? 'tab active' : 'tab'} onClick={() => setState(s)}>
               {t(`hmi.states.${s}`)}
@@ -137,15 +145,14 @@ export function HmiLibraryPage() {
       {items === null && <p className="muted">{t('common.loading')}</p>}
 
       {items &&
-        hmiGroups.map((g) => {
-          const list = items.filter((i) => i.group === g);
-          if (!list.length && (archived || !canEdit)) return null;
+        (() => {
+          const list = items.filter((i) => i.group === shelf && (archived || artsForGroup(shelf).includes(i.art)));
           return (
-            <section key={g} className="mt">
+            <section className="mt">
               <div className="props-head">
-                <h2>{t(`hmi.groups.${g}`)}</h2>
+                <h2>{t(`hmi.groups.${shelf}`)}</h2>
                 {canEdit && !archived && (
-                  <button type="button" className="btn btn-small btn-ghost-inline" onClick={() => openNew(g)}>
+                  <button type="button" className="btn btn-small btn-ghost-inline" onClick={() => openNew(shelf)}>
                     + {t('hmi.addElement')}
                   </button>
                 )}
@@ -181,7 +188,7 @@ export function HmiLibraryPage() {
               </div>
             </section>
           );
-        })}
+        })()}
 
       {edit && (
         <Modal sizeKey="hmi-element" className="modal-wide" onClose={() => setEdit(null)}>
@@ -207,8 +214,15 @@ export function HmiLibraryPage() {
               </label>
               <label>
                 {t('hmi.group')}
-                <select value={edit.data.group} onChange={(e) => setData({ group: e.target.value as HmiGroup })}>
-                  {hmiGroups.map((g) => (
+                <select
+                  value={edit.data.group}
+                  onChange={(e) => {
+                    const group = e.target.value as HmiGroup;
+                    const art = artsForGroup(group)[0] ?? edit.data.art;
+                    setData({ group, art, kind: art });
+                  }}
+                >
+                  {hmiShelfGroups.map((g) => (
                     <option key={g} value={g}>
                       {t(`hmi.groups.${g}`)}
                     </option>
@@ -217,8 +231,8 @@ export function HmiLibraryPage() {
               </label>
               <label>
                 {t('hmi.art')}
-                <select value={edit.data.art} onChange={(e) => setData({ art: e.target.value })}>
-                  {arts.map((a) => (
+                <select value={edit.data.art} onChange={(e) => setData({ art: e.target.value, kind: e.target.value })}>
+                  {artsForGroup(edit.data.group).map((a) => (
                     <option key={a} value={a}>
                       {t(`hmi.arts.${a}`)}
                     </option>

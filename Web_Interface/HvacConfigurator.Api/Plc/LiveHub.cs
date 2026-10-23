@@ -1,3 +1,4 @@
+using HvacConfigurator.Api.Authorization;
 using HvacConfigurator.Api.Data;
 using HvacConfigurator.Api.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -16,7 +17,7 @@ public class LiveHub(IPlcLink plc, LiveState state, AuditService audit, AppDbCon
         await base.OnConnectedAsync();
     }
 
-    [Authorize(Roles = "Engineer,Admin")]
+    [HasPermission(Perm.SimulatorUse)]
     public async Task<bool> SetSimInput(string key, double value)
     {
         var before = plc.Inputs.TryGetValue(key, out var b) ? b : (double?)null;

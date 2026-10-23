@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using HvacConfigurator.Api.Authorization;
 using HvacConfigurator.Api.Data;
 using HvacConfigurator.Api.Plc;
 using HvacConfigurator.Api.Services;
@@ -10,7 +11,7 @@ namespace HvacConfigurator.Api.Controllers;
 /// <summary>PLC CAN3 line: bench check and the doors master (Shared_Libs/hvac_can.h, DM_*).</summary>
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "Engineer,Admin")]
+[HasPermission(Perm.Can3Use)]
 public partial class Can3Controller(PlcFirmwareClient plc, AuditService audit, AppDbContext db) : ControllerBase
 {
     [GeneratedRegex("^([0-9a-fA-F]{2}){0,8}$")]

@@ -34,7 +34,8 @@ function uptime(ms: number) {
 /** Module firmware: files in the app, images in the PLC store, modules on the CAN bus, update runs. */
 export function FirmwareTab() {
   const { t, i18n } = useTranslation();
-  const { token } = useAuth();
+  const { token, can } = useAuth();
+  const canManage = can('firmware.manage');
   const confirm = useConfirm();
   const [files, setFiles] = useState<FirmwareFile[]>([]);
   const [builds, setBuilds] = useState<FirmwareBuild[]>([]);
@@ -218,10 +219,12 @@ export function FirmwareTab() {
       <div className="card">
         <div className="toolbar">
           <h2>{t('firmware.files')}</h2>
-          <label className={busy === 'upload' ? 'btn btn-primary disabled' : 'btn btn-primary'}>
-            {busy === 'upload' ? t('common.loading') : `+ ${t('firmware.upload')}`}
-            <input type="file" accept=".bin,.elf" multiple hidden disabled={!!busy} onChange={(e) => { upload(e.target.files); e.target.value = ''; }} />
-          </label>
+          {canManage && (
+            <label className={busy === 'upload' ? 'btn btn-primary disabled' : 'btn btn-primary'}>
+              {busy === 'upload' ? t('common.loading') : `+ ${t('firmware.upload')}`}
+              <input type="file" accept=".bin,.elf" multiple hidden disabled={!!busy} onChange={(e) => { upload(e.target.files); e.target.value = ''; }} />
+            </label>
+          )}
         </div>
         <p className="field-hint">{t('firmware.uploadHint')}</p>
         <div className="table-wrap">
@@ -260,31 +263,36 @@ export function FirmwareTab() {
                   </td>
                   <td className="ltr-value">{formatDateTime(f.sentToPlcAt, i18n.language)}</td>
                   <td className="row-actions">
-                    {(() => {
-                      const b = builds.find((x) => x.moduleType === f.moduleType);
-                      if (!b || files.find((x) => x.moduleType === f.moduleType) !== f) return null;
-                      return (
-                        <button
-                          type="button"
-                          className="btn btn-small"
-                          disabled={!!busy || b.loaded}
-                          title={
-                            b.loaded
-                              ? t('firmware.fromBuildLoaded')
-                              : t('firmware.fromBuildHint', { ver: ver(b.version), at: formatDateTime(b.builtAt, i18n.language) })
-                          }
-                          onClick={() => fromBuild(b)}
-                        >
-                          {busy === `build:${b.moduleType}` ? t('common.loading') : t('firmware.fromBuild', { ver: ver(b.version) })}
-                        </button>
-                      );
-                    })()}
-                    <button type="button" className="btn btn-small btn-primary" disabled={!!busy || runActive || !status?.online} onClick={() => send(f)}>
-                      {busy === `send:${f.id}` ? t('firmware.sending') : t('firmware.send')}
-                    </button>
-                    <button type="button" className="btn btn-small btn-danger" disabled={!!busy} onClick={() => remove(f)}>
-                      {t('common.delete')}
-                    </button>
+                    {canManage &&
+                      (() => {
+                        const b = builds.find((x) => x.moduleType === f.moduleType);
+                        if (!b || files.find((x) => x.moduleType === f.moduleType) !== f) return null;
+                        return (
+                          <button
+                            type="button"
+                            className="btn btn-small"
+                            disabled={!!busy || b.loaded}
+                            title={
+                              b.loaded
+                                ? t('firmware.fromBuildLoaded')
+                                : t('firmware.fromBuildHint', { ver: ver(b.version), at: formatDateTime(b.builtAt, i18n.language) })
+                            }
+                            onClick={() => fromBuild(b)}
+                          >
+                            {busy === `build:${b.moduleType}` ? t('common.loading') : t('firmware.fromBuild', { ver: ver(b.version) })}
+                          </button>
+                        );
+                      })()}
+                    {canManage && (
+                      <button type="button" className="btn btn-small btn-primary" disabled={!!busy || runActive || !status?.online} onClick={() => send(f)}>
+                        {busy === `send:${f.id}` ? t('firmware.sending') : t('firmware.send')}
+                      </button>
+                    )}
+                    {canManage && (
+                      <button type="button" className="btn btn-small btn-danger" disabled={!!busy} onClick={() => remove(f)}>
+                        {t('common.delete')}
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -302,9 +310,11 @@ export function FirmwareTab() {
               </strong>
               <div className="muted">{t('firmware.runCounts', { done: plc.run.done, failed: plc.run.failed })}</div>
             </div>
-            <button type="button" className="btn btn-danger" disabled={busy === 'cancel'} onClick={cancel}>
-              {t('firmware.cancel')}
-            </button>
+            {canManage && (
+              <button type="button" className="btn btn-danger" disabled={busy === 'cancel'} onClick={cancel}>
+                {t('firmware.cancel')}
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -346,6 +356,7 @@ export function FirmwareTab() {
                       <td>
                         <select
                           value={modes[type] ?? MODE_DIFFERENT}
+                          disabled={!canManage}
                           onChange={(e) => setModes({ ...modes, [type]: Number(e.target.value) })}
                         >
                           <option value={MODE_DIFFERENT}>{t('firmware.modes.1')}</option>
@@ -353,15 +364,17 @@ export function FirmwareTab() {
                         </select>
                       </td>
                       <td className="row-actions">
-                        <button
-                          type="button"
-                          className="btn btn-small btn-primary"
-                          disabled={!image || runActive || !!busy || status?.uploading || status?.stale}
-                          onClick={() => image && startRun(type, image.ver)}
-                        >
-                          {t('firmware.run')}
-                        </button>
-                        {bak && (
+                        {canManage && (
+                          <button
+                            type="button"
+                            className="btn btn-small btn-primary"
+                            disabled={!image || runActive || !!busy || status?.uploading || status?.stale}
+                            onClick={() => image && startRun(type, image.ver)}
+                          >
+                            {t('firmware.run')}
+                          </button>
+                        )}
+                        {canManage && bak && (
                           <button
                             type="button"
                             className="btn btn-small"

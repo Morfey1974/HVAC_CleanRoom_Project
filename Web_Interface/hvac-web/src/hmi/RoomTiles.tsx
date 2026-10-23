@@ -1,13 +1,17 @@
 import { useTranslation } from 'react-i18next';
 import type { HmiRoomItem, Room } from '../api/client';
 import { pickName } from '../lib/localized';
+import type { HmiParams } from '../api/client';
 import { artLibrary, demoValues, HmiDefs, type HmiState } from './arts';
 import { CASE_H } from './AhuView';
+import { isPipeArt, pipeSize } from './pipeGeom';
 
-type Props = { rooms: Room[]; items: HmiRoomItem[]; values?: Record<string, number> };
+type Props = { rooms: Room[]; items: HmiRoomItem[]; values?: Record<string, number>; demo?: HmiState };
+
+const demoRoom = { t: 21.5, rh: 45, dp: 12 };
 
 /** Rooms as tiles in one row: temperature, humidity and pressure against the room setpoints. */
-export function RoomTiles({ rooms, items, values }: Props) {
+export function RoomTiles({ rooms, items, values, demo }: Props) {
   const { t, i18n } = useTranslation();
   const shown = items.map((it) => ({ it, room: rooms.find((r) => r.id === it.roomId) })).filter((x) => x.room);
   if (!shown.length) return <div className="hmi-canvas muted hmi-empty">{t('hmi.noRoomsOnScreen')}</div>;
@@ -22,7 +26,7 @@ export function RoomTiles({ rooms, items, values }: Props) {
         ] as const;
         const lines = rows.map((row) => {
           const tag = it.bind[row.key];
-          const v = tag && values ? values[tag] : undefined;
+          const v = demo ? demoRoom[row.key] : tag && values ? values[tag] : undefined;
           const out = v !== undefined && row.sp != null && row.tol != null && Math.abs(v - row.sp) > row.tol;
           return { ...row, tag, v, out };
         });
@@ -34,7 +38,7 @@ export function RoomTiles({ rooms, items, values }: Props) {
               {r.isoClass != null && <span className="hmi-tile__iso ltr-value">ISO {r.isoClass}</span>}
             </div>
             {lines
-              .filter((l) => l.tag)
+              .filter((l) => l.tag || demo)
               .map((l) => (
                 <div key={l.key} className={`hmi-tile__row ${l.out ? 'hmi-tile__row--out' : ''}`}>
                   <span>{l.label}</span>
@@ -47,7 +51,7 @@ export function RoomTiles({ rooms, items, values }: Props) {
                   )}
                 </div>
               ))}
-            {!lines.some((l) => l.tag) && <div className="muted small">{t('hmi.noBindings')}</div>}
+            {!demo && !lines.some((l) => l.tag) && <div className="muted small">{t('hmi.noBindings')}</div>}
           </div>
         );
       })}
@@ -56,13 +60,13 @@ export function RoomTiles({ rooms, items, values }: Props) {
 }
 
 /** One library picture on its own (equipment, room tile, or a single section). */
-export function ArtPreview({ art, length, params, state }: { art: string; length: number; params: { label?: string; stages?: number }; state: HmiState }) {
+export function ArtPreview({ art, length, params, state }: { art: string; length: number; params: HmiParams; state: HmiState }) {
   const R = artLibrary[art];
-  const h = CASE_H;
+  const size = isPipeArt(art) ? pipeSize(art, length, params.rot ?? 0) : { w: length, h: CASE_H };
   return (
-    <svg viewBox={`-4 -4 ${length + 8} ${h + 8}`} className="hmi-preview-svg">
+    <svg viewBox={`-4 -4 ${size.w + 8} ${size.h + 8}`} className="hmi-preview-svg">
       <HmiDefs />
-      {R ? <R w={length} h={h} v={demoValues(art, state, params)} p={params} state={state} air={state === 'stopped' ? 0 : 80} /> : null}
+      {R ? <R w={size.w} h={size.h} v={demoValues(art, state, params)} p={params} state={state} air={state === 'stopped' ? 0 : 80} /> : null}
     </svg>
   );
 }

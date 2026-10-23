@@ -28,14 +28,14 @@ const isCategory = (v: string | undefined): v is LibraryCategory => libraryCateg
 export function LibraryPage() {
   const { category } = useParams();
   const { t, i18n } = useTranslation();
-  const { token, hasRole } = useAuth();
+  const { token, can } = useAuth();
   const [archived, setArchived] = useState(false);
   const [items, setItems] = useState<LibraryItem[] | null>(null);
   const [search, setSearch] = useState('');
   const [edit, setEdit] = useState<Edit | null>(null);
   const [error, setError] = useState('');
   const confirm = useConfirm();
-  const canEdit = hasRole('Engineer');
+  const canEdit = can('library.edit');
   const cat = isCategory(category) ? category : null;
 
   const load = useCallback(() => {

@@ -1,24 +1,27 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { api, type Settings, type UserRow } from '../../api/client';
+import { api, type Settings } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
-import { formatDateTime } from '../../lib/localized';
+import { RECORDS_STRICT } from '../../lib/recordsMode';
 import { languages } from '../../i18n';
-import { BidiText, bidiAutoInput } from '../../components/BidiText';
+import { bidiAutoInput } from '../../components/BidiText';
 import { AuditTable } from '../../components/AuditTable';
 import { FirmwareTab } from './FirmwareTab';
 import { Can3Tab } from './Can3Tab';
+import { UsersTab } from './UsersTab';
+import { RolesTab } from './RolesTab';
 
 export function SettingsPage() {
   const { t } = useTranslation();
-  const { hasRole } = useAuth();
+  const { can } = useAuth();
   const tabs = [
-    { k: 'general', show: hasRole('Viewer') },
-    { k: 'users', show: hasRole('Admin') },
-    { k: 'audit', show: hasRole('Engineer') },
-    { k: 'firmware', show: hasRole('Engineer') },
-    { k: 'can3', show: hasRole('Engineer') },
+    { k: 'general', show: can('settings.view') },
+    { k: 'users', show: can('users.view') },
+    { k: 'roles', show: can('roles.view') },
+    { k: 'audit', show: can('audit.view') },
+    { k: 'firmware', show: can('firmware.view') },
+    { k: 'can3', show: can('can3.use') },
   ].filter((x) => x.show);
 
   return (
@@ -32,12 +35,13 @@ export function SettingsPage() {
         ))}
       </div>
       <Routes>
-        <Route index element={<Navigate to="general" replace />} />
-        <Route path="general" element={<GeneralTab />} />
-        {hasRole('Admin') && <Route path="users" element={<UsersTab />} />}
-        {hasRole('Engineer') && <Route path="audit" element={<AuditTable />} />}
-        {hasRole('Engineer') && <Route path="firmware" element={<FirmwareTab />} />}
-        {hasRole('Engineer') && <Route path="can3" element={<Can3Tab />} />}
+        <Route index element={<Navigate to={tabs[0]?.k ?? 'general'} replace />} />
+        {can('settings.view') && <Route path="general" element={<GeneralTab />} />}
+        {can('users.view') && <Route path="users" element={<UsersTab />} />}
+        {can('roles.view') && <Route path="roles" element={<RolesTab />} />}
+        {can('audit.view') && <Route path="audit" element={<AuditTable />} />}
+        {can('firmware.view') && <Route path="firmware" element={<FirmwareTab />} />}
+        {can('can3.use') && <Route path="can3" element={<Can3Tab />} />}
       </Routes>
     </div>
   );
@@ -45,10 +49,10 @@ export function SettingsPage() {
 
 function GeneralTab() {
   const { t } = useTranslation();
-  const { token, hasRole } = useAuth();
+  const { token, can } = useAuth();
   const [s, setS] = useState<Settings | null>(null);
   const [msg, setMsg] = useState('');
-  const canEdit = hasRole('Admin');
+  const canEdit = can('settings.edit');
 
   useEffect(() => {
     if (token) api.settings(token).then(setS).catch(() => undefined);
@@ -92,6 +96,11 @@ function GeneralTab() {
         {t('settings.plcAddress')}
         <input value={s.plcAddress} disabled={!canEdit} dir="ltr" onChange={(e) => setS({ ...s, plcAddress: e.target.value })} />
       </label>
+      <label className="settings-check">
+        <input type="checkbox" checked={RECORDS_STRICT} disabled />
+        {t('settings.recordsStrict')}
+        <span className="field-hint">{t('settings.recordsStrictHint')}</span>
+      </label>
       {canEdit && (
         <div>
           <button type="submit" className="btn btn-primary">
@@ -100,42 +109,5 @@ function GeneralTab() {
         </div>
       )}
     </form>
-  );
-}
-
-function UsersTab() {
-  const { t, i18n } = useTranslation();
-  const { token } = useAuth();
-  const [rows, setRows] = useState<UserRow[]>([]);
-  useEffect(() => {
-    if (token) api.users(token).then(setRows).catch(() => undefined);
-  }, [token]);
-  return (
-    <div className="card table-wrap">
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th>{t('settings.login')}</th>
-            <th>{t('settings.fullName')}</th>
-            <th>{t('settings.role')}</th>
-            <th>{t('settings.lastLogin')}</th>
-            <th>{t('settings.active')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((u) => (
-            <tr key={u.id}>
-              <td className="ltr-value">{u.login}</td>
-              <td>
-                <BidiText>{u.fullName}</BidiText>
-              </td>
-              <td>{t(`roles.${u.role}`)}</td>
-              <td className="ltr-value">{formatDateTime(u.lastLoginAt, i18n.language)}</td>
-              <td>{u.isActive ? '✓' : ''}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
   );
 }

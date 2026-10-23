@@ -14,7 +14,7 @@ const emptyEq: EquipmentSave = { libraryItemId: null, tag: '', quantity: 1, room
 
 export function EquipmentPage() {
   const { t, i18n } = useTranslation();
-  const { token, hasRole } = useAuth();
+  const { token, can } = useAuth();
   const { projectId, reload: reloadProject } = useProject();
   const [rows, setRows] = useState<Equipment[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -22,7 +22,7 @@ export function EquipmentPage() {
   const [edit, setEdit] = useState<Edit | null>(null);
   const [error, setError] = useState('');
   const confirm = useConfirm();
-  const canEdit = hasRole('Engineer');
+  const canEdit = can('equipment.edit');
   const name = (n: { ru: string; en: string; he: string }) => pickName(n, i18n.language).value;
 
   const load = useCallback(() => {

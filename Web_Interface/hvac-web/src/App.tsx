@@ -31,18 +31,46 @@ function AppRoutes() {
       <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<Navigate to="/projects" replace />} />
-          <Route path="/projects" element={<ProjectsPage />} />
+          <Route
+            path="/projects"
+            element={
+              <ProtectedRoute perm="projects.view">
+                <ProjectsPage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/projects/new"
             element={
-              <ProtectedRoute minRole="Engineer">
+              <ProtectedRoute perm="projects.create">
                 <ProjectWizard />
               </ProtectedRoute>
             }
           />
-          <Route path="/library" element={<Navigate to="/library/module" replace />} />
-          <Route path="/library/:category" element={<LibraryPage />} />
-          <Route path="/hmi-library" element={<HmiLibraryPage />} />
+          <Route
+            path="/library"
+            element={
+              <ProtectedRoute perm="library.view">
+                <Navigate to="/library/module" replace />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/library/:category"
+            element={
+              <ProtectedRoute perm="library.view">
+                <LibraryPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/hmi-library"
+            element={
+              <ProtectedRoute perm="hmi.library.view">
+                <HmiLibraryPage />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/system/*" element={<SettingsPage />} />
           <Route path="/p/:projectId/*" element={<ProjectRoutes />} />
           <Route path="/active/:section" element={<ActiveProjectRedirect />} />

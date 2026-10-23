@@ -12,14 +12,15 @@ public class JwtTokenService(IOptions<JwtSettings> options)
 {
     private readonly JwtSettings _s = options.Value;
 
-    public string Create(User user)
+    public string Create(User user, IReadOnlyList<string> permissions)
     {
-        var claims = new[]
+        var claims = new List<Claim>
         {
-            new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
-            new Claim(ClaimTypes.Name, user.Login),
-            new Claim(ClaimTypes.Role, user.Role.ToString()),
+            new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+            new(ClaimTypes.Name, user.Login),
+            new(ClaimTypes.Role, user.RoleRef.Code),
         };
+        claims.AddRange(permissions.Select(p => new Claim("perm", p)));
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_s.Secret));
         var token = new JwtSecurityToken(
             _s.Issuer,

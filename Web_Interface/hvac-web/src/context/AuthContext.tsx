@@ -1,24 +1,41 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { api, type AuthResponse, type Role } from '../api/client';
+import { api, type AuthResponse } from '../api/client';
 import { setUnauthorizedHandler } from '../api/http';
-
-const ROLE_RANK: Record<Role, number> = { Viewer: 0, Operator: 1, Engineer: 2, Admin: 3 };
 
 type AuthState = {
   token: string | null;
   user: AuthResponse | null;
   login: (login: string, password: string) => Promise<void>;
   logout: () => void;
-  hasRole: (min: Role) => boolean;
+  can: (perm: string) => boolean;
 };
 
 const STORAGE_KEY = 'hvac_auth';
 const AuthContext = createContext<AuthState | null>(null);
 
+function readAuthRaw(): string | null {
+  const own = sessionStorage.getItem(STORAGE_KEY);
+  if (own) return own;
+  try {
+    const fromOpener = window.opener?.sessionStorage?.getItem(STORAGE_KEY) as string | null | undefined;
+    if (fromOpener) {
+      sessionStorage.setItem(STORAGE_KEY, fromOpener);
+      return fromOpener;
+    }
+  } catch {
+    /* popup cannot read opener */
+  }
+  return null;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthResponse | null>(() => {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as AuthResponse) : null;
+    const raw = readAuthRaw();
+    if (!raw) return null;
+    const data = JSON.parse(raw) as AuthResponse;
+    if (Array.isArray(data.permissions)) return data;
+    sessionStorage.removeItem(STORAGE_KEY);
+    return null;
   });
 
   const persist = useCallback((data: AuthResponse | null) => {
@@ -29,17 +46,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (l: string, p: string) => persist(await api.login(l, p)), [persist]);
   const logout = useCallback(() => persist(null), [persist]);
-  const hasRole = useCallback((min: Role) => !!user && ROLE_RANK[user.role] >= ROLE_RANK[min], [user]);
+  const can = useCallback((perm: string) => !!user?.permissions?.includes(perm), [user]);
 
   useEffect(() => {
     setUnauthorizedHandler(logout);
     return () => setUnauthorizedHandler(null);
   }, [logout]);
 
-  const value = useMemo(
-    () => ({ token: user?.token ?? null, user, login, logout, hasRole }),
-    [user, login, logout, hasRole]
-  );
+  const value = useMemo(() => ({ token: user?.token ?? null, user, login, logout, can }), [user, login, logout, can]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

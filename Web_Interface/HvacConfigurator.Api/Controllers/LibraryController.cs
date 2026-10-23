@@ -1,3 +1,4 @@
+using HvacConfigurator.Api.Authorization;
 using HvacConfigurator.Api.Dto;
 using HvacConfigurator.Api.Entities;
 using HvacConfigurator.Api.Services;
@@ -20,7 +21,7 @@ public class LibraryController(LibraryService library) : ControllerBase
         await library.GetAsync(id, ct) is { } i ? Ok(i) : NotFound();
 
     [HttpPost]
-    [Authorize(Roles = "Engineer,Admin")]
+    [HasPermission(Perm.LibraryEdit)]
     public async Task<IActionResult> Create([FromBody] LibraryItemSaveRequest req, CancellationToken ct)
     {
         var (dto, err) = await library.CreateAsync(req, ct);
@@ -28,7 +29,7 @@ public class LibraryController(LibraryService library) : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Roles = "Engineer,Admin")]
+    [HasPermission(Perm.LibraryEdit)]
     public async Task<IActionResult> Update(Guid id, [FromBody] LibraryItemSaveRequest req, CancellationToken ct)
     {
         var (dto, err) = await library.UpdateAsync(id, req, ct);
@@ -36,7 +37,7 @@ public class LibraryController(LibraryService library) : ControllerBase
     }
 
     [HttpPost("{id:guid}/archive")]
-    [Authorize(Roles = "Engineer,Admin")]
+    [HasPermission(Perm.LibraryEdit)]
     public async Task<IActionResult> Archive(Guid id, [FromQuery] bool value = true, [FromQuery] string? reason = null, CancellationToken ct = default) =>
         await library.SetArchivedAsync(id, value, reason, ct) is { } i ? Ok(i) : NotFound();
 }

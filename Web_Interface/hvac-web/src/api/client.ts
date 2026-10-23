@@ -1,16 +1,17 @@
 import { downloadFile, request } from './http';
 
-export type Role = 'Viewer' | 'Operator' | 'Engineer' | 'Admin';
+export type LocalizedText = { ru: string; en: string; he: string };
 
 export type AuthResponse = {
   token: string;
   userId: string;
   login: string;
   fullName: string;
-  role: Role;
+  role: string;
+  roleId: string;
+  roleName: LocalizedText;
+  permissions: string[];
 };
-
-export type LocalizedText = { ru: string; en: string; he: string };
 
 export type Project = {
   id: string;
@@ -245,7 +246,34 @@ export type EquipmentSave = {
 export type Settings = { siteName: string; startupLanguage: string; plcMode: string; plcAddress: string };
 export type PublicSettings = { siteName: string; startupLanguage: string };
 
-export type UserRow = { id: string; login: string; fullName: string; role: Role; isActive: boolean; lastLoginAt: string | null };
+export type UserRow = {
+  id: string;
+  login: string;
+  fullName: string;
+  roleId: string;
+  role: string;
+  roleName: LocalizedText;
+  isActive: boolean;
+  lastLoginAt: string | null;
+};
+
+export type UserSave = { login: string; fullName: string; roleId: string; password?: string; isActive: boolean; reason?: string };
+
+export type AppRole = {
+  id: string;
+  code: string;
+  name: LocalizedText;
+  description: string;
+  isBuiltIn: boolean;
+  isArchived: boolean;
+  permissions: string[];
+  userCount: number;
+  updatedAt: string;
+};
+
+export type AppRoleSave = { code?: string; name: LocalizedText; description?: string; permissions: string[]; reason?: string };
+
+export type PermissionCatalog = { groups: { group: string; keys: string[] }[] };
 
 export type AuditEntry = {
   id: number;
@@ -436,12 +464,17 @@ export type PlcFwState = {
 
 export type PlcFwStatus = { online: boolean; stale: boolean; uploading: boolean; error: string | null; plc: PlcFwState | null };
 
-export type HmiGroup = 'section' | 'equipment' | 'room' | 'instrument';
-export const hmiGroups: HmiGroup[] = ['section', 'equipment', 'room', 'instrument'];
+export type HmiGroup = 'section' | 'duct' | 'pipe' | 'instrument' | 'equipment' | 'room';
+export const hmiGroups: HmiGroup[] = ['section', 'duct', 'pipe', 'instrument', 'equipment', 'room'];
+/** Five shelves of the HMI library. Equipment stays in the API for old cards. */
+export const hmiShelfGroups: HmiGroup[] = ['section', 'duct', 'pipe', 'instrument', 'room'];
+/** Palettes on a unit screen: rooms live on the rooms screen. */
+export const hmiPaletteGroups: HmiGroup[] = ['section', 'duct', 'pipe', 'instrument'];
 export type HmiStatus = 'draft' | 'approved';
 export type HmiDrive = 'manual' | 'motor';
 /** Picture options; for a motorised damper also the actuator wiring (supply, control input, feedback output). */
-export type HmiParams = { label?: string; stages?: number; drive?: HmiDrive; supply?: string; control?: string; feedback?: string };
+export type HmiFluid = 'cold' | 'hot';
+export type HmiParams = { label?: string; stages?: number; drive?: HmiDrive; supply?: string; control?: string; feedback?: string; rot?: number; fluid?: HmiFluid };
 
 export type HmiElement = {
   id: string;
@@ -479,11 +512,26 @@ export type HmiAhuItem = {
   params: HmiParams;
   name: LocalizedText;
   bind: Record<string, string>;
+  /** Ducts: intake or supply side of the unit. */
+  side?: 'in' | 'out';
+  /** Instruments sit on a section, duct or pipe. */
+  hostUid?: string;
+  /** Free-placed pipes: top-left in the unit drawing. */
+  x?: number;
+  y?: number;
+  rot?: number;
 };
 
 export type HmiRoomItem = { roomId: string; bind: { t?: string; rh?: string; dp?: string } };
 
-export type HmiScreenContent = { items?: HmiAhuItem[]; flowTag?: string; rooms?: HmiRoomItem[] };
+export type HmiScreenContent = {
+  items?: HmiAhuItem[];
+  ducts?: HmiAhuItem[];
+  pipes?: HmiAhuItem[];
+  instruments?: HmiAhuItem[];
+  flowTag?: string;
+  rooms?: HmiRoomItem[];
+};
 
 export type HmiScreen = { id: string; kind: HmiScreenKind; name: LocalizedText; sortOrder: number; content: HmiScreenContent; updatedAt: string };
 
@@ -501,6 +549,14 @@ export const api = {
   settings: (t: string) => request<Settings>('/api/settings', {}, t),
   saveSettings: (t: string, s: Settings) => request<Settings>('/api/settings', { method: 'PUT', body: json(s) }, t),
   users: (t: string) => request<UserRow[]>('/api/settings/users', {}, t),
+  createUser: (t: string, u: UserSave) => request<UserRow>('/api/settings/users', { method: 'POST', body: json(u) }, t),
+  updateUser: (t: string, id: string, u: UserSave) => request<UserRow>(`/api/settings/users/${id}`, { method: 'PUT', body: json(u) }, t),
+  permissionCatalog: (t: string) => request<PermissionCatalog>('/api/settings/permissions', {}, t),
+  roles: (t: string, archived = false) => request<AppRole[]>(`/api/settings/roles?archived=${archived}`, {}, t),
+  createRole: (t: string, r: AppRoleSave) => request<AppRole>('/api/settings/roles', { method: 'POST', body: json(r) }, t),
+  updateRole: (t: string, id: string, r: AppRoleSave) => request<AppRole>(`/api/settings/roles/${id}`, { method: 'PUT', body: json(r) }, t),
+  archiveRole: (t: string, id: string, value: boolean, reason?: string) =>
+    request<AppRole>(`/api/settings/roles/${id}/archive?value=${value}&${q(reason)}`, { method: 'POST' }, t),
 
   projects: (t: string, archived = false) => request<Project[]>(`/api/projects?archived=${archived}`, {}, t),
   project: (t: string, id: string) => request<Project>(P(id), {}, t),

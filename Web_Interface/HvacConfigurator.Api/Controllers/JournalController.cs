@@ -1,3 +1,4 @@
+using HvacConfigurator.Api.Authorization;
 using HvacConfigurator.Api.Data;
 using HvacConfigurator.Api.Dto;
 using HvacConfigurator.Api.Services;
@@ -13,7 +14,7 @@ namespace HvacConfigurator.Api.Controllers;
 public class JournalController(AuditService audit, AppDbContext db) : ControllerBase
 {
     [HttpGet("audit")]
-    [Authorize(Roles = "Engineer,Admin")]
+    [HasPermission(Perm.AuditView)]
     public async Task<IActionResult> Audit([FromQuery] int offset = 0, [FromQuery] int limit = 50, [FromQuery] Guid? projectId = null, CancellationToken ct = default) =>
         Ok(await audit.ListAsync(offset, limit, projectId, ct));
 
@@ -29,7 +30,7 @@ public class JournalController(AuditService audit, AppDbContext db) : Controller
     }
 
     [HttpPost("alarms/{id:long}/ack")]
-    [Authorize(Roles = "Operator,Engineer,Admin")]
+    [HasPermission(Perm.AlarmsAck)]
     public async Task<IActionResult> Ack(long id, CancellationToken ct)
     {
         var a = await db.AlarmEvents.FirstOrDefaultAsync(x => x.Id == id, ct);

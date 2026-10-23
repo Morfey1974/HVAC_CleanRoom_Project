@@ -7,59 +7,59 @@ import { changeLanguage, isLangCode, languages } from '../i18n';
 import { pickName } from '../lib/localized';
 import { AlarmBell } from './AlarmBell';
 import { BidiText } from './BidiText';
-import type { Role } from '../api/client';
 import logoDcm from '../assets/logo-dcm.png';
 
-type NavItem = { to: string; key: string; minRole: Role };
+type NavItem = { to: string; key: string; perm: string };
 
 const globalNav: NavItem[] = [
-  { to: '/projects', key: 'projects', minRole: 'Viewer' },
-  { to: '/library', key: 'library', minRole: 'Viewer' },
-  { to: '/hmi-library', key: 'hmiLibrary', minRole: 'Viewer' },
-  { to: '/system', key: 'system', minRole: 'Viewer' },
+  { to: '/projects', key: 'projects', perm: 'projects.view' },
+  { to: '/library', key: 'library', perm: 'library.view' },
+  { to: '/hmi-library', key: 'hmiLibrary', perm: 'hmi.library.view' },
+  { to: '/system', key: 'system', perm: 'settings.view' },
 ];
 
 export const projectNavGroups: { group: string; items: NavItem[] }[] = [
   {
     group: 'project',
     items: [
-      { to: 'overview', key: 'overview', minRole: 'Viewer' },
-      { to: 'documents', key: 'documents', minRole: 'Viewer' },
+      { to: 'overview', key: 'overview', perm: 'projects.view' },
+      { to: 'documents', key: 'documents', perm: 'documents.view' },
     ],
   },
   {
     group: 'analysis',
     items: [
-      { to: 'pid', key: 'pid', minRole: 'Engineer' },
-      { to: 'aoi', key: 'aoi', minRole: 'Engineer' },
+      { to: 'pid', key: 'pid', perm: 'analysis.edit' },
+      { to: 'aoi', key: 'aoi', perm: 'analysis.edit' },
     ],
   },
   {
     group: 'config',
     items: [
-      { to: 'rooms', key: 'rooms', minRole: 'Viewer' },
-      { to: 'equipment', key: 'equipment', minRole: 'Viewer' },
-      { to: 'signals', key: 'signals', minRole: 'Engineer' },
-      { to: 'hardware', key: 'hardware', minRole: 'Engineer' },
-      { to: 'scheme', key: 'scheme', minRole: 'Engineer' },
-      { to: 'binding', key: 'binding', minRole: 'Engineer' },
-      { to: 'regulators', key: 'regulators', minRole: 'Engineer' },
-      { to: 'mnemo', key: 'mnemo', minRole: 'Engineer' },
+      { to: 'rooms', key: 'rooms', perm: 'rooms.view' },
+      { to: 'equipment', key: 'equipment', perm: 'equipment.view' },
+      { to: 'signals', key: 'signals', perm: 'signals.edit' },
+      { to: 'hardware', key: 'hardware', perm: 'hardware.view' },
+      { to: 'scheme', key: 'scheme', perm: 'scheme.view' },
+      { to: 'binding', key: 'binding', perm: 'binding.edit' },
+      { to: 'regulators', key: 'regulators', perm: 'regulators.edit' },
+      { to: 'mnemo', key: 'mnemo', perm: 'hmi.screens.view' },
     ],
   },
   {
     group: 'operation',
     items: [
-      { to: 'monitoring', key: 'monitoring', minRole: 'Viewer' },
-      { to: 'alarms', key: 'alarms', minRole: 'Viewer' },
-      { to: 'commissioning', key: 'commissioning', minRole: 'Engineer' },
+      { to: 'monitoring', key: 'monitoring', perm: 'monitoring.view' },
+      { to: 'alarms', key: 'alarms', perm: 'alarms.view' },
+      { to: 'commissioning', key: 'commissioning', perm: 'commissioning.edit' },
     ],
   },
   {
     group: 'records',
     items: [
-      { to: 'journal', key: 'journal', minRole: 'Engineer' },
-      { to: 'export', key: 'export', minRole: 'Engineer' },
+      { to: 'journal', key: 'journal', perm: 'audit.view' },
+      { to: 'reports', key: 'reports', perm: 'reports.view' },
+      { to: 'export', key: 'export', perm: 'plc.config.view' },
     ],
   },
 ];
@@ -92,13 +92,15 @@ function PlcClock({ time, ok }: { time?: string | null; ok: boolean }) {
   );
 }
 
+const systemPerms = ['settings.view', 'users.view', 'roles.view', 'audit.view', 'firmware.view', 'can3.use'];
+
 function GlobalNav() {
   const { t } = useTranslation();
-  const { hasRole } = useAuth();
+  const { can } = useAuth();
   return (
     <nav className="app-nav">
       {globalNav
-        .filter((i) => hasRole(i.minRole))
+        .filter((i) => (i.key === 'system' ? systemPerms.some(can) : can(i.perm)))
         .map((i) => (
           <NavLink key={i.to} to={i.to} className={linkClass}>
             {t(`nav.${i.key}`)}
@@ -110,7 +112,7 @@ function GlobalNav() {
 
 function ProjectNav() {
   const { t, i18n } = useTranslation();
-  const { hasRole } = useAuth();
+  const { can } = useAuth();
   const { projectId, project } = useProject();
   return (
     <nav className="app-nav app-nav--project">
@@ -122,7 +124,7 @@ function ProjectNav() {
         {project?.isActiveOnSite && <span className="badge badge--site">{t('projects.activeOnSite')}</span>}
       </div>
       {projectNavGroups.map((g) => {
-        const items = g.items.filter((i) => hasRole(i.minRole));
+        const items = g.items.filter((i) => can(i.perm));
         if (!items.length) return null;
         return (
           <div key={g.group} className="nav-group">
@@ -172,7 +174,13 @@ function Shell({ inProject }: { inProject: boolean }) {
             ))}
           </select>
           <span className="user-label">
-            {user?.fullName || user?.login} · {user && t(`roles.${user.role}`)}
+            {user?.fullName || user?.login}
+            {user && (
+              <>
+                {' · '}
+                <BidiText>{user.roleName ? pickName(user.roleName, i18n.language).value : user.role}</BidiText>
+              </>
+            )}
           </span>
           <button type="button" className="btn btn-ghost" onClick={logout}>
             {t('header.logout')}
@@ -191,7 +199,15 @@ function Shell({ inProject }: { inProject: boolean }) {
 
 export function Layout() {
   const match = useMatch('/p/:projectId/*');
+  const preview = useMatch('/p/:projectId/hmi-preview/:screenId') ?? useMatch('/p/:projectId/hmi-preview');
   const projectId = match?.params.projectId;
+  if (projectId && preview) {
+    return (
+      <ProjectProvider projectId={projectId}>
+        <Outlet />
+      </ProjectProvider>
+    );
+  }
   return projectId ? (
     <ProjectProvider projectId={projectId}>
       <Shell inProject />

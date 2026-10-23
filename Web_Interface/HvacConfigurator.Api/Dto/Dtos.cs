@@ -2,7 +2,9 @@ namespace HvacConfigurator.Api.Dto;
 
 public record LoginRequest(string Login, string Password);
 
-public record AuthResponse(string Token, Guid UserId, string Login, string FullName, string Role);
+public record AuthResponse(
+    string Token, Guid UserId, string Login, string FullName, string Role, Guid RoleId,
+    LocalizedTextDto RoleName, IReadOnlyList<string> Permissions);
 
 public record LocalizedTextDto(string Ru, string En, string He);
 
@@ -44,7 +46,18 @@ public record SettingsDto(string SiteName, string StartupLanguage, string PlcMod
 
 public record PublicSettingsDto(string SiteName, string StartupLanguage);
 
-public record UserDto(Guid Id, string Login, string FullName, string Role, bool IsActive, DateTime? LastLoginAt);
+public record UserDto(Guid Id, string Login, string FullName, Guid RoleId, string Role, LocalizedTextDto RoleName, bool IsActive, DateTime? LastLoginAt);
+
+public record UserSaveRequest(string Login, string FullName, Guid RoleId, string? Password, bool IsActive, string? Reason);
+
+public record RoleDto(
+    Guid Id, string Code, LocalizedTextDto Name, string Description, bool IsBuiltIn, bool IsArchived,
+    IReadOnlyList<string> Permissions, int UserCount, DateTime UpdatedAt);
+
+public record RoleSaveRequest(string? Code, LocalizedTextDto Name, string? Description, IReadOnlyList<string>? Permissions, string? Reason);
+
+public record PermissionCatalogDto(IReadOnlyList<PermissionGroupDto> Groups);
+public record PermissionGroupDto(string Group, IReadOnlyList<string> Keys);
 
 public record ProjectDto(
     Guid Id, LocalizedTextDto Name, string Number, string Customer, string Address, string Responsible,

@@ -138,10 +138,13 @@ public class HmiService(AppDbContext db, AuditService audit)
         catch (JsonException) { yield break; }
         using (doc)
         {
-            if (!doc.RootElement.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array) yield break;
-            foreach (var it in items.EnumerateArray())
+            foreach (var key in new[] { "items", "ducts", "pipes", "instruments" })
             {
-                if (it.TryGetProperty("elementId", out var e) && e.TryGetGuid(out var g)) yield return g;
+                if (!doc.RootElement.TryGetProperty(key, out var arr) || arr.ValueKind != JsonValueKind.Array) continue;
+                foreach (var it in arr.EnumerateArray())
+                {
+                    if (it.TryGetProperty("elementId", out var e) && e.TryGetGuid(out var g)) yield return g;
+                }
             }
         }
     }

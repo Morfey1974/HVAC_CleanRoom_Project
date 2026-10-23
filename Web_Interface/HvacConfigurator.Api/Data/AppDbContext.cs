@@ -7,6 +7,7 @@ namespace HvacConfigurator.Api.Data;
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<User> Users => Set<User>();
+    public DbSet<AppRole> Roles => Set<AppRole>();
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<Room> Rooms => Set<Room>();
     public DbSet<ProjectDocument> ProjectDocuments => Set<ProjectDocument>();
@@ -30,12 +31,21 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     protected override void OnModelCreating(ModelBuilder b)
     {
+        b.Entity<AppRole>(e =>
+        {
+            e.ToTable("Roles");
+            e.HasIndex(x => x.Code).IsUnique();
+            e.Property(x => x.Code).HasMaxLength(64);
+            e.Property(x => x.Description).HasMaxLength(500);
+            e.OwnsOne(x => x.Name, n => LocalizedName(n, 120));
+        });
+
         b.Entity<User>(e =>
         {
             e.HasIndex(x => x.Login).IsUnique();
             e.Property(x => x.Login).HasMaxLength(64);
             e.Property(x => x.FullName).HasMaxLength(128);
-            e.Property(x => x.Role).HasConversion<string>().HasMaxLength(16);
+            e.HasOne(x => x.RoleRef).WithMany(x => x.Users).HasForeignKey(x => x.RoleId).OnDelete(DeleteBehavior.Restrict);
         });
 
         b.Entity<Project>(e =>

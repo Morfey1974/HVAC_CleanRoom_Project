@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Text.Json;
 using HvacConfigurator.Api.Dto;
 using HvacConfigurator.Api.Entities;
@@ -10,6 +11,8 @@ public static class DbSeeder
 {
     public static async Task SeedAsync(AppDbContext db, IConfiguration config)
     {
+        await SeedRolesAsync(db);
+
         if (!await db.Users.AnyAsync())
         {
             var password = config["Seed:AdminPassword"] ?? "admin";
@@ -18,7 +21,7 @@ public static class DbSeeder
                 Login = "admin",
                 FullName = "Administrator",
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
-                Role = UserRole.Admin,
+                RoleId = Perm.AdminId,
             });
         }
 
@@ -68,6 +71,38 @@ public static class DbSeeder
 
     private static LocalizedText L(string ru, string en, string he) => new() { Ru = ru, En = en, He = he };
 
+    private static async Task SeedRolesAsync(AppDbContext db)
+    {
+        AppRole Built(Guid id, string code, LocalizedText name, string desc) => new()
+        {
+            Id = id,
+            Code = code,
+            Name = name,
+            Description = desc,
+            IsBuiltIn = true,
+            PermissionsJson = Localized.ToJson(Perm.ForBuiltIn(code)),
+        };
+        AppRole[] built =
+        [
+            Built(Perm.ViewerId, "Viewer", L("Просмотр", "View", "צפייה"), "Только смотреть"),
+            Built(Perm.OperatorId, "Operator", L("Оператор", "Operator", "מפעיל"), "Квитирование аварий и уставки"),
+            Built(Perm.EngineerId, "Engineer", L("Инженер", "Engineer", "מהנדס"), "Конфигуратор, библиотеки, загрузка в ПЛК"),
+            Built(Perm.AdminId, "Admin", L("Администратор", "Administrator", "מנהל"), "Пользователи, роли, настройки системы"),
+        ];
+        foreach (var role in built)
+        {
+            var existing = await db.Roles.FirstOrDefaultAsync(r => r.Id == role.Id);
+            if (existing is null)
+            {
+                db.Roles.Add(role);
+                continue;
+            }
+            var have = Perm.Sanitize(JsonSerializer.Deserialize<string[]>(existing.PermissionsJson, Localized.Json));
+            existing.PermissionsJson = Localized.ToJson(Perm.Sanitize(have.Concat(Perm.ForBuiltIn(role.Code))));
+        }
+        await db.SaveChangesAsync();
+    }
+
     /// <summary>First HMI library content from NanoMotion 26000017 (plan 5.7) and the demo project screens.</summary>
     private static async Task SeedHmiAsync(AppDbContext db)
     {
@@ -93,6 +128,23 @@ public static class DbSeeder
                 E("HMI-DAMPER-01", S, "damper", L("Заслонка с электроприводом", "Motorised damper", "מדף ממונע"), 60,
                     new { drive = "motor", supply = "24V AC/DC", control = "0-10V", feedback = "0-10V" }),
                 E("HMI-DAMPER-02", S, "damper", L("Заслонка ручная", "Manual damper", "מדף ידני"), 50, new { drive = "manual" }),
+                E("HMI-RECOVERY-01", S, "recovery", L("Теплоутилизатор", "Heat recovery", "מחליף חום"), 110),
+                E("HMI-PANEL-01", S, "controlPanel", L("Шкаф управления", "Control panel", "לוח בקרה"), 90),
+                E("HMI-DUCT-S", HmiGroups.Duct, "ductStraight", L("Воздуховод прямой", "Straight duct", "תעלה ישרה"), 100),
+                E("HMI-DUCT-E", HmiGroups.Duct, "ductElbow", L("Воздуховод отвод", "Duct elbow", "תעלה עם פנייה"), 90),
+                E("HMI-DUCT-T", HmiGroups.Duct, "ductTee", L("Воздуховод тройник", "Duct tee", "תעלה T"), 100),
+                E("HMI-DUCT-G", HmiGroups.Duct, "ductGrille", L("Решётка", "Grille", "רשת"), 80),
+                E("HMI-DUCT-X", HmiGroups.Duct, "ductSilencer", L("Шумоглушитель", "Silencer", "משתיק קול"), 100),
+                E("HMI-PIPE-H", HmiGroups.Pipe, "pipeH", L("Труба", "Pipe", "צינור"), 80),
+                E("HMI-PIPE-E", HmiGroups.Pipe, "pipeElbow", L("Отвод 90°", "90° elbow", "זווית 90°"), 48),
+                E("HMI-PIPE-V", HmiGroups.Pipe, "pipeValve", L("Вентиль", "Valve", "שסתום"), 48),
+                E("HMI-SENS-T", HmiGroups.Instrument, "sensorT", L("Датчик температуры", "Temperature sensor", "חיישן טמפרטורה"), 70),
+                E("HMI-SENS-DP", HmiGroups.Instrument, "sensorDp", L("Датчик перепада", "Differential pressure sensor", "חיישן הפרש לחצים"), 70),
+                E("HMI-SENS-P", HmiGroups.Instrument, "sensorP", L("Датчик давления", "Pressure sensor", "חיישן לחץ"), 70),
+                E("HMI-SENS-AQ", HmiGroups.Instrument, "sensorAq", L("Датчик качества воздуха", "Air quality sensor", "חיישן איכות אוויר"), 70),
+                E("HMI-SENS-SM", HmiGroups.Instrument, "sensorSmoke", L("Датчик дыма", "Smoke detector", "גלאי עשן"), 70),
+                E("HMI-ACT-01", HmiGroups.Instrument, "actuator", L("Привод заслонки", "Damper actuator", "מפעיל מדף"), 70),
+                E("HMI-VFD-01", HmiGroups.Instrument, "vfd", L("Частотник", "VFD", "ממיר תדר"), 80),
                 E("HMI-VRF-01", HmiGroups.Equipment, "vrf", L("Наружный блок VRF", "VRF outdoor unit", "יחידה חיצונית VRF"), 100),
                 E("HMI-FFU-01", HmiGroups.Equipment, "ffu", L("Потолочный фильтр FFU", "Fan filter unit", "FFU"), 90),
                 E("HMI-AC-01", HmiGroups.Equipment, "acUnit", L("Кондиционер", "Air conditioner", "מזגן"), 110),
@@ -105,6 +157,40 @@ public static class DbSeeder
                 db.HmiElements.AddRange(missing);
                 await db.SaveChangesAsync();
             }
+            var keepPipes = new HashSet<string> { "HMI-PIPE-H", "HMI-PIPE-E", "HMI-PIPE-V" };
+            var pipeRows = await db.HmiElements.Where(e => e.Group == HmiGroups.Pipe).ToListAsync();
+            foreach (var row in pipeRows)
+            {
+                if (!keepPipes.Contains(row.Code)) row.IsArchived = true;
+            }
+            var pipeH = pipeRows.FirstOrDefault(e => e.Code == "HMI-PIPE-H");
+            if (pipeH is not null)
+            {
+                pipeH.Art = "pipeH";
+                pipeH.Kind = "pipeH";
+                pipeH.Name = L("Труба", "Pipe", "צינור");
+                pipeH.Length = 80;
+                pipeH.IsArchived = false;
+            }
+            var elbow = pipeRows.FirstOrDefault(e => e.Code == "HMI-PIPE-E");
+            if (elbow is not null)
+            {
+                elbow.Art = "pipeElbow";
+                elbow.Kind = "pipeElbow";
+                elbow.Name = L("Отвод 90°", "90° elbow", "זווית 90°");
+                elbow.Length = 48;
+                elbow.IsArchived = false;
+            }
+            var valve = pipeRows.FirstOrDefault(e => e.Code == "HMI-PIPE-V");
+            if (valve is not null)
+            {
+                valve.Art = "pipeValve";
+                valve.Kind = "pipeValve";
+                valve.Name = L("Вентиль", "Valve", "שסתום");
+                valve.Length = 48;
+                valve.IsArchived = false;
+            }
+            await db.SaveChangesAsync();
         }
 
         var demo = await db.Projects.Where(p => p.Number == "DEMO-001" && !p.IsArchived).OrderBy(p => p.CreatedAt).FirstOrDefaultAsync();

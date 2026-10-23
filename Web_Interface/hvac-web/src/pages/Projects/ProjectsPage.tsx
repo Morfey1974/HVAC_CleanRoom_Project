@@ -10,14 +10,16 @@ import { confirmArchive } from './ProjectForm';
 
 export function ProjectsPage() {
   const { t, i18n } = useTranslation();
-  const { token, hasRole } = useAuth();
+  const { token, can } = useAuth();
   const navigate = useNavigate();
   const [archived, setArchived] = useState(false);
   const [list, setList] = useState<Project[] | null>(null);
   const [search, setSearch] = useState('');
   const [error, setError] = useState('');
   const confirm = useConfirm();
-  const canEdit = hasRole('Engineer');
+  const canCreate = can('projects.create');
+  const canArchive = can('projects.archive');
+  const canCopy = can('projects.copy');
 
   const load = useCallback(() => {
     if (token) api.projects(token, archived).then(setList).catch((e: Error) => setError(e.message));
@@ -70,7 +72,7 @@ export function ProjectsPage() {
         <h1>
           {t('projects.title')} {list && <span className="count-pill">{filtered.length}</span>}
         </h1>
-        {canEdit && (
+        {canCreate && (
           <Link to="/projects/new" className="btn btn-primary">
             + {t('projects.create')}
           </Link>
@@ -94,7 +96,7 @@ export function ProjectsPage() {
       {list !== null && filtered.length === 0 && (
         <div className="card empty-state">
           <p>{archived ? t('projects.emptyArchive') : t('projects.empty')}</p>
-          {!archived && canEdit && (
+          {!archived && canCreate && (
             <Link to="/projects/new" className="btn btn-primary">
               + {t('projects.create')}
             </Link>
@@ -135,16 +137,18 @@ export function ProjectsPage() {
                   {t('projects.updated')}: <span className="ltr-value">{formatDate(p.updatedAt, i18n.language)}</span>
                 </div>
               </Link>
-              {canEdit && (
+              {(canCopy || canArchive) && (
                 <div className="project-card__actions">
-                  {!p.isArchived && (
+                  {!p.isArchived && canCopy && (
                     <button type="button" className="btn btn-small btn-ghost-inline" onClick={() => copyAsk(p)}>
                       {t('projects.copy')}
                     </button>
                   )}
-                  <button type="button" className="btn btn-small btn-ghost-inline" onClick={() => archive(p, !p.isArchived)}>
-                    {p.isArchived ? t('projects.restore') : t('projects.toArchive')}
-                  </button>
+                  {canArchive && (
+                    <button type="button" className="btn btn-small btn-ghost-inline" onClick={() => archive(p, !p.isArchived)}>
+                      {p.isArchived ? t('projects.restore') : t('projects.toArchive')}
+                    </button>
+                  )}
                 </div>
               )}
             </div>

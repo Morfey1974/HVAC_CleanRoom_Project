@@ -120,7 +120,7 @@ export function SchemePage() {
 
 function SchemeEditor() {
   const { t, i18n } = useTranslation();
-  const { token, hasRole } = useAuth();
+  const { token, can } = useAuth();
   const { projectId, reload: reloadProject } = useProject();
   const confirm = useConfirm();
   const flow = useReactFlow();
@@ -135,7 +135,7 @@ function SchemeEditor() {
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [paletteFilter, setPaletteFilter] = useState('');
-  const canEdit = hasRole('Engineer');
+  const canEdit = can('scheme.edit');
   const name = useCallback((n: { ru: string; en: string; he: string }) => pickName(n, i18n.language).value, [i18n.language]);
   const errText = (m: string) => t(`scheme.errors.${m}`, { defaultValue: t(`hardware.errors.${m}`, { defaultValue: m }) });
 

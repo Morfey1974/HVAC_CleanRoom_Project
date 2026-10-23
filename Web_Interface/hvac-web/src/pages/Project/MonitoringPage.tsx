@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api, type Equipment, type HmiScreen, type ProjectModule, type Room } from '../../api/client';
 import { MnemoView } from '../../mnemo/MnemoView';
-import { AhuView } from '../../hmi/AhuView';
+import { AhuView, ahuScreenProps } from '../../hmi/AhuView';
 import { RoomTiles } from '../../hmi/RoomTiles';
 import { BidiText } from '../../components/BidiText';
 import { demoNanoMotion } from '../../mnemo/demoNanoMotion';
@@ -45,10 +45,10 @@ function useHmiScreens() {
 export function MonitoringPage() {
   const { t, i18n } = useTranslation();
   const { snapshot } = useLive();
-  const { hasRole } = useAuth();
+  const { can } = useAuth();
   const { project } = useProject();
   const alarmElements = useMemo(() => new Set((snapshot?.alarms ?? []).map((a) => a.element)), [snapshot]);
-  const showSim = snapshot?.mode === 'simulator' && hasRole('Engineer');
+  const showSim = snapshot?.mode === 'simulator' && can('simulator.use');
   const screens = useHmiScreens();
   const demo = project?.number === DEMO_PROJECT && screens !== null && screens.list.length === 0;
 
@@ -67,7 +67,7 @@ export function MonitoringPage() {
                     <BidiText>{pickName(s.name, i18n.language).value}</BidiText>
                   </b>
                   {s.kind === 'ahu' ? (
-                    <AhuView items={s.content.items ?? []} values={snapshot?.values} flowTag={s.content.flowTag} />
+                    <AhuView {...ahuScreenProps(s.content)} values={snapshot?.values} />
                   ) : (
                     <RoomTiles rooms={screens.rooms} items={s.content.rooms ?? []} values={snapshot?.values} />
                   )}

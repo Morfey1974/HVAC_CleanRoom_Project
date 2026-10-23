@@ -41,10 +41,10 @@ const fmt = (v: number | null, unit = '') => (v === null ? '' : `${v}${unit}`);
 
 export function RoomsPage() {
   const { t, i18n } = useTranslation();
-  const { token, hasRole } = useAuth();
+  const { token, can } = useAuth();
   const { projectId, reload: reloadProject } = useProject();
   const confirm = useConfirm();
-  const canEdit = hasRole('Engineer');
+  const canEdit = can('rooms.edit');
   const [rooms, setRooms] = useState<Room[]>([]);
   const [edit, setEdit] = useState<{ id: string | null; data: RoomSave } | null>(null);
   const [error, setError] = useState('');
